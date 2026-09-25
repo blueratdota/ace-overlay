@@ -10,6 +10,7 @@
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
   <img alt="Qt 6 / PySide6" src="https://img.shields.io/badge/UI-Qt%206%20(PySide6)-41CD52?logo=qt&logoColor=white">
   <img alt="Game: Assetto Corsa EVO" src="https://img.shields.io/badge/game-Assetto%20Corsa%20EVO-c8102e">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow"></a>
 </p>
 
 <p align="center">
@@ -197,6 +198,10 @@ build.py          # portable package builder
 - [live-telemetry-evo](https://github.com/albertowd/live-telemetry-evo) for its detailed
   field-by-field
   [shared memory reference](https://github.com/albertowd/live-telemetry-evo/blob/develop/docs/SHARED_MEMORY.md).
+
+## License
+
+Released under the [MIT License](LICENSE).
 
 ## Disclaimer
 

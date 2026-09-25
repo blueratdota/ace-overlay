@@ -90,6 +90,7 @@ def main():
     prune(app_dir)
     for extra in ("README.txt", "Check telemetry.bat"):
         shutil.copy(ROOT / "packaging" / extra, app_dir / extra)
+    shutil.copy(ROOT / "LICENSE", app_dir / "LICENSE.txt")
 
     # Zip the folder itself so users get a single "ace-overlay" folder when they extract.
     archive = shutil.make_archive(str(DIST / f"{NAME}-{version}-win64"), "zip", DIST, NAME)
