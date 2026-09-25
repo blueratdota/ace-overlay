@@ -7,9 +7,20 @@ from .shm import Physics
 
 MAX_RPM = 8000
 # Top speed (km/h) at redline for each forward gear, indexed by the raw gear value (2 = 1st).
-GEAR_TOP = {2: 75, 3: 115, 4: 155, 5: 195, 6: 235, 7: 275}
+GEAR_TOP = {2: 70, 3: 100, 4: 130, 5: 160, 6: 190, 7: 250}
 FRONT = (True, True, False, False)  # FL, FR, RL, RR
 LEFT = (True, False, True, False)
+V_EXIT, V_TOP, V_APEX = 120.0, 225.0, 90.0  # km/h at lap start, end of straight, apex
+
+
+def lap_speed(t):
+    """Speed as a function of lap time, so every lap is identical (and loops seamlessly)."""
+    if t < 6.0:  # straight: strong pull that tapers off
+        return V_EXIT + (V_TOP - V_EXIT) * (1 - math.exp(-t / 2.2)) / (1 - math.exp(-6 / 2.2))
+    if t < 7.5:  # heavy initial brake, easing off as the brake trails
+        x = (t - 6.0) / 1.5
+        return V_TOP - (V_TOP - V_APEX) * (1 - (1 - x) ** 2)
+    return V_APEX + (V_EXIT - V_APEX) * (t - 7.5) / 2.5  # exit
 
 
 class DemoSource:
@@ -17,8 +28,8 @@ class DemoSource:
 
     def __init__(self):
         self._start = self._last = time.monotonic()
-        self._speed = 90.0
-        self._gear = 4
+        self._speed = V_EXIT
+        self._gear = 5
         self._shift_until = 0.0
         self._packet = 0
         # [wheel][inner, middle, outer], starting a little cold so the tyres visibly warm up.
@@ -38,11 +49,10 @@ class DemoSource:
             gas, brake = min(1.0, (t - 7.5) / 1.8), 0.0
             corner = math.sin((t - 6.0) / 3.0 * math.pi) if t < 9.0 else 0.0
 
-        self._speed += (gas * 45 * (1 - self._speed / 290) - brake * 90 - 2) * dt
-        self._speed = max(40.0, min(280.0, self._speed))
+        self._speed = lap_speed(t)
 
         rpm = self._speed / GEAR_TOP[self._gear] * MAX_RPM
-        if rpm > MAX_RPM * 0.98 and self._gear < 7:
+        if rpm >= MAX_RPM and self._gear < 7:  # shift at the limiter, so the shift light gets its moment
             self._gear += 1
             self._shift_until = now + 0.12
         elif self._gear > 2 and self._speed < GEAR_TOP[self._gear - 1] * 0.65:
