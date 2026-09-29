@@ -139,13 +139,15 @@ The window suits typical racing slicks. Adjust `TYRE_STOPS` in
 
 ## How it works
 
-AC EVO publishes live telemetry through Windows named shared memory (`Local\acevo_pmf_physics`).
-This is the same official interface dashboards and tools like SimHub use. The overlay opens that
-block **read-only** about 60 times a second and draws it in a transparent, always-on-top window.
-It never modifies game files and never injects into the game process.
+AC EVO publishes live telemetry through Windows named shared memory. This is the same official
+interface dashboards and tools like SimHub use. The overlay opens two of those blocks
+**read-only** about 60 times a second and draws them in a transparent, always-on-top window. It
+never modifies game files and never injects into the game process.
 
 ```
-AC EVO ──writes──▶ Local\acevo_pmf_physics (800-byte struct) ──read-only──▶ ace-overlay ──▶ transparent HUD
+             ┌─▶ Local\acevo_pmf_physics   pedals, gear, speed, RPM, wheel slip, ABS/TC ─┐
+AC EVO ──────┤                                                                          ├──▶ ace-overlay ──▶ transparent HUD
+             └─▶ Local\acevo_pmf_graphics  per-tyre surface temperatures, ABS/TC flags ──┘
 ```
 
 ### Good to know
@@ -180,7 +182,7 @@ a portable folder with a user-facing `README.txt` and `Check telemetry.bat`.
 
 ```
 ace_overlay/
-├── shm.py        # read-only shared-memory reader and the 800-byte physics struct
+├── shm.py        # read-only shared-memory reader, physics + graphics structs
 ├── overlay.py    # the HUD window, plus pin and settings buttons
 ├── config.py     # user settings (QSettings) and the settings window
 ├── demo.py       # simulated telemetry lap for development

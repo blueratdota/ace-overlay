@@ -16,16 +16,23 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 
 ## Telemetry facts that aren't obvious from the code
 
-- **Only the physics block** (`Local\acevo_pmf_physics`, 800 bytes, `_pack_ = 4`) is used. Its offsets
-  are fixed and pinned by `tests/test_shm.py`. The graphics block has `char[33]`/`bool` padding, so
-  its offsets shift. Don't read single fields from it without modelling the whole struct.
-- **Not yet verified against the live game.** The layout comes from Kunos' Steam guide #3707421508
-  and live-telemetry-evo's `docs/SHARED_MEMORY.md`. The least certain fields are `tyreTempI/M/O`. If
-  they turn out wrong, the graphics block's `tyre_temperature_left/center/right` are community-verified
-  to match the HUD.
+- **The overlay consumes a `Physics` frame.** `LiveSource` reads the physics block (800 bytes, fixed
+  offsets) plus the leading part of the graphics block (`Graphics`, up to the four `TyreState`s), and
+  patches physics fields that EVO leaves empty. Offsets for both are pinned by `tests/test_shm.py`. The
+  graphics block has `bool`/`int16`/`char[33]` padding, so every field before the one you want must
+  be modelled.
+- **Verified live (Golf 8 R, 2026-09-29):** pedals, gear, speed and RPM from physics are correct.
+  Physics `tyreTempI/M/O` are **always 0**, so the real values come from graphics
+  `TyreState.temperature_left/center/right`. Left/right are car-relative: left wheels have outer = left,
+  right wheels have inner = left. Physics `absInAction` **never fires**. ABS shows up as `physics.abs`
+  (0/1) and `graphics.abs_active`, which match exactly, so `LiveSource` ORs all three.
+- **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
+  It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.
-- **TC/ABS side is inferred.** The game only sends single `tcInAction`/`absInAction` flags, so
-  `slipping_sides()` picks the side from per-wheel `slipRatio`.
+- **TC/ABS side is inferred.** The game only sends car-wide flags, so `slipping_sides()` picks the
+  side from per-wheel `slipRatio` (populated during ABS on the Golf; graphics `TyreState.lock` never fired).
+- For live investigation, attach to both blocks while the user drives and count how often each
+  candidate signal fires. Don't trust docs alone: several documented fields are dead in EVO.
 - Attach with `OpenFileMappingW`, never `mmap.mmap(tagname=...)`: mmap silently creates an empty
   mapping when the game isn't running. `LiveSource` reattaches when `packetId` stops changing, so it
   notices game restarts.

@@ -3,7 +3,7 @@
 AC EVO publishes three named file mappings: Local\\acevo_pmf_physics,
 Local\\acevo_pmf_graphics and Local\\acevo_pmf_static. The physics block is a
 fixed 800-byte, 4-byte-packed struct. The first 416 bytes match AC1's
-SPageFilePhysics.
+SPageFilePhysics. A few things EVO only fills in the graphics block; see LiveSource.
 
 Layout reference: Kunos' Steam guide #3707421508 and
 https://github.com/albertowd/live-telemetry-evo/blob/develop/docs/SHARED_MEMORY.md
@@ -14,6 +14,7 @@ import time
 from ctypes import wintypes
 
 PHYSICS_TAG = "Local\\acevo_pmf_physics"
+GRAPHICS_TAG = "Local\\acevo_pmf_graphics"
 
 _f = ctypes.c_float
 _i = ctypes.c_int32
@@ -115,6 +116,109 @@ class Physics(ctypes.Structure):
     ]
 
 
+_b = ctypes.c_bool
+_c33 = ctypes.c_char * 33
+
+
+class TyreState(ctypes.Structure):
+    """SMEvoTyreState, 256 bytes. left/right are faces of the contact patch relative to the car
+    (verified live), so on left-side wheels left = outer, and on right-side wheels left = inner."""
+
+    _pack_ = 4
+    _fields_ = [
+        ("slip", _f),
+        ("lock", _b),
+        ("pressure", _f),
+        ("temperature_c", _f),
+        ("brake_temperature_c", _f),
+        ("brake_pressure", _f),
+        ("temperature_left", _f),
+        ("temperature_center", _f),
+        ("temperature_right", _f),
+        ("compound_front", _c33),
+        ("compound_rear", _c33),
+        ("normalized_pressure", _f),
+        ("normalized_temperature_left", _f),
+        ("normalized_temperature_center", _f),
+        ("normalized_temperature_right", _f),
+        ("brake_normalized_temperature", _f),
+        ("normalized_temperature_core", _f),
+        ("_reserved", ctypes.c_byte * 128),
+    ]
+
+
+class Graphics(ctypes.Structure):
+    """Leading part of SPageFileGraphicEvo, up to the four tyre states; the rest isn't read.
+
+    Unlike physics, this block mixes bool / int16 / char[33] fields, so offsets depend on every
+    field before them. tests/test_shm.py pins the ones we use.
+    """
+
+    _pack_ = 4
+    _fields_ = [
+        ("packetId", _i),
+        ("status", _i),
+        ("focused_car_id", ctypes.c_uint64 * 2),
+        ("player_car_id", ctypes.c_uint64 * 2),
+        ("rpm", ctypes.c_uint16),
+        ("is_rpm_limiter_on", _b),
+        ("is_change_up_rpm", _b),
+        ("is_change_down_rpm", _b),
+        ("tc_active", _b),
+        ("abs_active", _b),
+        ("esc_active", _b),
+        ("launch_active", _b),
+        ("is_ignition_on", _b),
+        ("is_engine_running", _b),
+        ("kers_is_charging", _b),
+        ("is_wrong_way", _b),
+        ("is_drs_available", _b),
+        ("battery_is_charging", _b),
+        ("is_max_kj_per_lap_reached", _b),
+        ("is_max_charge_kj_per_lap_reached", _b),
+        ("display_speed_kmh", ctypes.c_int16),
+        ("display_speed_mph", ctypes.c_int16),
+        ("display_speed_ms", ctypes.c_int16),
+        ("pitspeeding_delta", _f),
+        ("gear_int", ctypes.c_int16),
+        ("rpm_percent", _f),
+        ("gas_percent", _f),
+        ("brake_percent", _f),
+        ("handbrake_percent", _f),
+        ("clutch_percent", _f),
+        ("steering_percent", _f),
+        ("ffb_strength", _f),
+        ("car_ffb_multiplier", _f),
+        ("water_temperature_percent", _f),
+        ("water_pressure_bar", _f),
+        ("fuel_pressure_bar", _f),
+        ("water_temperature_c", ctypes.c_int8),
+        ("air_temperature_c", ctypes.c_int8),
+        ("oil_temperature_c", _f),
+        ("oil_pressure_bar", _f),
+        ("exhaust_temperature_c", _f),
+        ("g_forces", _F3),
+        ("turbo_boost", _f),
+        ("turbo_boost_level", _f),
+        ("turbo_boost_perc", _f),
+        ("steer_degrees", _i),
+        ("current_km", _f),
+        ("total_km", ctypes.c_uint32),
+        ("total_driving_time_s", ctypes.c_uint32),
+        ("time_of_day", _i * 3),
+        ("delta_time_ms", _i),
+        ("current_lap_time_ms", _i),
+        ("predicted_lap_time_ms", _i),
+        ("fuel_liter_current_quantity", _f),
+        ("fuel_liter_current_quantity_percent", _f),
+        ("fuel_liter_per_km", _f),
+        ("km_per_fuel_liter", _f),
+        ("current_torque", _f),
+        ("current_bhp", _i),
+        ("tyres", TyreState * 4),  # FL, FR, RL, RR (Kunos: tyre_lf, tyre_rf, tyre_lr, tyre_rr)
+    ]
+
+
 _FILE_MAP_READ = 0x0004
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _kernel32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
@@ -166,22 +270,29 @@ class SharedBlock:
 
 
 class LiveSource:
-    """Physics telemetry from the running game.
+    """Telemetry from the running game, as a Physics frame patched with what EVO only
+    publishes in the graphics block (verified live on a Golf 8 R, 2026-09-29):
 
-    Our open handle keeps the mapping alive after the game exits. When packetId
-    stops changing, reattach: that fails once the game is gone and picks up a
-    fresh mapping after a restart.
+    - tyreTempI/M/O are always 0 in EVO. The real per-face temperatures come from the
+      graphics TyreStates.
+    - absInAction stays 0 even while ABS works. physics.abs (0/1) and graphics.abs_active
+      fire together instead, so every source is OR-ed in. TC is treated the same way.
+
+    Our open handle keeps the mapping alive after the game exits. When packetId stops
+    changing, reattach: that fails once the game is gone and picks up a fresh mapping
+    after a restart.
     """
 
     STALE_AFTER_S = 3.0
 
     def __init__(self):
-        self._block = SharedBlock(PHYSICS_TAG, Physics)
+        self._physics = SharedBlock(PHYSICS_TAG, Physics)
+        self._graphics = SharedBlock(GRAPHICS_TAG, Graphics)
         self._last_packet = None
         self._last_change = time.monotonic()
 
     def read(self):
-        frame = self._block.read()
+        frame = self._physics.read()
         if frame is None:
             return None
         now = time.monotonic()
@@ -189,6 +300,19 @@ class LiveSource:
             self._last_packet = frame.packetId
             self._last_change = now
         elif now - self._last_change > self.STALE_AFTER_S:
-            self._block.close()
+            self._physics.close()
+            self._graphics.close()
             self._last_change = now
+
+        frame.absInAction = int(bool(frame.absInAction or frame.abs > 0))
+        frame.tcInAction = int(bool(frame.tcInAction or frame.tc > 0))
+        graphics = self._graphics.read()
+        if graphics is not None:
+            frame.absInAction |= graphics.abs_active
+            frame.tcInAction |= graphics.tc_active
+            for w, tyre in enumerate(graphics.tyres):
+                left_side = w % 2 == 0  # FL, RL
+                outer, inner = ((tyre.temperature_left, tyre.temperature_right) if left_side
+                                else (tyre.temperature_right, tyre.temperature_left))
+                frame.tyreTempI[w], frame.tyreTempM[w], frame.tyreTempO[w] = inner, tyre.temperature_center, outer
         return frame
