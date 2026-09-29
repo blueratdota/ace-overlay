@@ -177,46 +177,88 @@ class ConfigButton(SideButton):
         p.drawEllipse(QPoint(0, 0), 4.5, 4.5)
 
 
-class InputsOverlay(QWidget):
-    locked_changed = Signal(bool)
+class OverlayWindow(QWidget):
+    """A pinnable HUD window: click-through while pinned, draggable while unpinned, and its
+    position is remembered under `pos_key`. Subclasses pick their side buttons with BUTTONS."""
 
-    def __init__(self, source, settings):
+    locked_changed = Signal(bool)
+    BUTTONS = (PinButton,)
+
+    def __init__(self, settings, pos_key, default_pos, width, height):
         super().__init__(None, BASE_FLAGS | Qt.WindowTransparentForInput)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self.setFixedSize(W, H)
-
-        self.source = source
+        self.setFixedSize(width, height)
         self.settings = settings
-        self.config = Config.load(settings)
-        self.settings_dialog = None
+        self.pos_key = pos_key
         self.locked = True
+        self.side_buttons = tuple(button(self) for button in self.BUTTONS)
+        self.move(settings.value(pos_key, default_pos))
+
+    def set_locked(self, locked):
+        """Locked = click-through. Unlocked = drag the window to reposition it."""
+        if locked == self.locked:
+            return
+        self.locked = locked
+        visible = self.isVisible()
+        self.setWindowFlags(BASE_FLAGS | Qt.WindowTransparentForInput if locked else BASE_FLAGS)
+        if visible:  # changing flags hides a window; don't reveal one the user has turned off
+            self.show()
+        if locked:
+            self.settings.setValue(self.pos_key, self.pos())
+        self.locked_changed.emit(locked)
+
+    def showEvent(self, _event):
+        for button in self.side_buttons:
+            button.follow()
+            button.show()
+            button.raise_()
+
+    def hideEvent(self, _event):
+        for button in self.side_buttons:
+            button.hide()
+
+    def moveEvent(self, _event):
+        for button in self.side_buttons:
+            button.follow()
+
+    def mousePressEvent(self, event):
+        if not self.locked and event.button() == Qt.LeftButton:
+            self.windowHandle().startSystemMove()
+
+    def paint_background(self, p):
+        """Translucent card, plus a dashed yellow border while unpinned."""
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(BG)
+        p.drawRoundedRect(QRectF(0, 0, w, h), 8, 8)
+        if not self.locked:
+            p.setPen(QPen(YELLOW, 2, Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 8, 8)
+
+
+class InputsOverlay(OverlayWindow):
+    config_changed = Signal()  # emitted by the settings window after every change
+    BUTTONS = (PinButton, ConfigButton)
+
+    def __init__(self, source, settings):
+        super().__init__(settings, "pos", QPoint(60, 60), W, H)
+        self.source = source
+        self.config = Config.load(settings)
+        self.config_changed.connect(self.update)
+        self.settings_dialog = None
         self.frame = None
         self.trace = deque()  # (time, gas, brake, clutch) for every tick
         self.blink = 0
         # (aid, side) -> time the light stops flashing; side 0 = left, 1 = right
         self.aid_until = {(aid, side): 0.0 for aid in ("tc", "abs") for side in (0, 1)}
 
-        self.side_buttons = (PinButton(self), ConfigButton(self))
-        self.move(settings.value("pos", QPoint(60, 60)))
-
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(16)
 
     # --- behaviour -------------------------------------------------------
-
-    def set_locked(self, locked):
-        """Locked = click-through. Unlocked = drag the overlay to reposition it."""
-        if locked == self.locked:
-            return
-        self.locked = locked
-        flags = BASE_FLAGS | Qt.WindowTransparentForInput if locked else BASE_FLAGS
-        self.setWindowFlags(flags)
-        self.show()
-        if locked:
-            self.settings.setValue("pos", self.pos())
-        self.locked_changed.emit(locked)
 
     def open_settings(self):
         if self.settings_dialog is None:
@@ -227,20 +269,6 @@ class InputsOverlay(QWidget):
         self.settings_dialog.show()
         self.settings_dialog.raise_()
         self.settings_dialog.activateWindow()
-
-    def showEvent(self, _event):
-        for button in self.side_buttons:
-            button.follow()
-            button.show()
-            button.raise_()
-
-    def moveEvent(self, _event):
-        for button in self.side_buttons:
-            button.follow()
-
-    def mousePressEvent(self, event):
-        if not self.locked and event.button() == Qt.LeftButton:
-            self.windowHandle().startSystemMove()
 
     def tick(self):
         f = self.frame = self.source.read()
@@ -263,14 +291,7 @@ class InputsOverlay(QWidget):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(Qt.NoPen)
-        p.setBrush(BG)
-        p.drawRoundedRect(QRectF(0, 0, W, H), 8, 8)
-
-        if not self.locked:
-            p.setPen(QPen(YELLOW, 2, Qt.DashLine))
-            p.setBrush(Qt.NoBrush)
-            p.drawRoundedRect(QRectF(1, 1, W - 2, H - 2), 8, 8)
+        self.paint_background(p)
 
         f = self.frame
         if f is None:

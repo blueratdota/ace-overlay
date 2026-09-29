@@ -121,7 +121,7 @@ _c33 = ctypes.c_char * 33
 
 
 class TyreState(ctypes.Structure):
-    """SMEvoTyreState, 256 bytes. left/right are faces of the contact patch relative to the car
+    """SMEvoTyreState, 256 bytes. Pressures are psi. left/right are faces of the contact patch relative to the car
     (verified live), so on left-side wheels left = outer, and on right-side wheels left = inner."""
 
     _pack_ = 4
@@ -147,11 +147,61 @@ class TyreState(ctypes.Structure):
     ]
 
 
+class Electronics(ctypes.Structure):
+    """SMEvoElectronics, 128 bytes: the driver-adjustable aid / map settings."""
+
+    _pack_ = 4
+    _fields_ = [
+        ("tc_level", ctypes.c_int8),
+        ("tc_cut_level", ctypes.c_int8),
+        ("abs_level", ctypes.c_int8),
+        ("esc_level", ctypes.c_int8),
+        ("ebb_level", ctypes.c_int8),
+        ("brake_bias", _f),
+        ("engine_map_level", ctypes.c_int8),
+        ("turbo_level", _f),
+        ("ers_deployment_map", ctypes.c_int8),
+        ("ers_recharge_map", _f),
+        ("is_ers_heat_charging_on", _b),
+        ("is_ers_overtake_mode_on", _b),
+        ("is_drs_open", _b),
+        ("diff_power_level", ctypes.c_int8),
+        ("diff_coast_level", ctypes.c_int8),
+        ("damper_levels", ctypes.c_int8 * 4),  # front bump, front rebound, rear bump, rear rebound
+        ("is_ignition_on", _b),
+        ("is_pitlimiter_on", _b),
+        ("active_performance_mode", ctypes.c_int8),
+        ("_reserved", ctypes.c_byte * 88),
+    ]
+
+
+class SessionState(ctypes.Structure):
+    """SMEvoSessionState, 256 bytes."""
+
+    _pack_ = 4
+    _fields_ = [
+        ("phase_name", _c33),
+        ("time_left", ctypes.c_char * 15),
+        ("time_left_ms", _i),
+        ("wait_time", ctypes.c_char * 15),
+        ("total_lap", _i),  # 0 in timed sessions
+        ("current_lap", _i),
+        ("lights_on", _i),
+        ("lights_mode", _i),
+        ("lap_length_km", _f),
+        ("end_session_flag", _i),
+        ("time_to_next_session", ctypes.c_char * 15),
+        ("flags", _b * 6),
+        ("_reserved", ctypes.c_byte * 143),
+    ]
+
+
 class Graphics(ctypes.Structure):
-    """Leading part of SPageFileGraphicEvo, up to the four tyre states; the rest isn't read.
+    """SPageFileGraphicEvo, the HUD-rate block. Substructs the overlay doesn't read are opaque bytes.
 
     Unlike physics, this block mixes bool / int16 / char[33] fields, so offsets depend on every
-    field before them. tests/test_shm.py pins the ones we use.
+    field before them. The layout was checked against the live game (car_model, lap times and fuel
+    decode correctly), and tests/test_shm.py pins the offsets used.
     """
 
     _pack_ = 4
@@ -216,6 +266,70 @@ class Graphics(ctypes.Structure):
         ("current_torque", _f),
         ("current_bhp", _i),
         ("tyres", TyreState * 4),  # FL, FR, RL, RR (Kunos: tyre_lf, tyre_rf, tyre_lr, tyre_rr)
+        ("npos", _f),  # 0..1 position around the lap
+        ("kers_charge_perc", _f),
+        ("kers_current_perc", _f),
+        ("control_lock_time", _f),
+        ("car_damage", ctypes.c_byte * 128),
+        ("car_location", _i),
+        ("pit_info", ctypes.c_byte * 64),
+        ("fuel_liter_used", _f),
+        ("fuel_liter_per_lap", _f),
+        ("laps_possible_with_fuel", _f),
+        ("battery_temperature", _f),
+        ("battery_voltage", _f),
+        ("instantaneous_fuel_liter_per_km", _f),
+        ("instantaneous_km_per_fuel_liter", _f),
+        ("gear_rpm_window", _f),
+        ("instrumentation", ctypes.c_byte * (3 * 128)),  # current, min limit, max limit
+        ("electronics", Electronics),
+        ("electronics_min_limit", Electronics),
+        ("electronics_max_limit", Electronics),
+        ("electronics_is_modifiable", Electronics),
+        ("total_lap_count", _i),  # completed laps
+        ("current_pos", ctypes.c_uint32),  # 0 when the session doesn't rank
+        ("total_drivers", ctypes.c_uint32),
+        ("last_laptime_ms", _i),
+        ("best_laptime_ms", _i),
+        ("flag", _i),
+        ("global_flag", _i),
+        ("max_gears", ctypes.c_uint32),
+        ("engine_type", _i),
+        ("has_kers", _b),
+        ("is_last_lap", _b),
+        ("performance_mode_name", _c33),
+        ("diff_coast_raw_value", _f),
+        ("diff_power_raw_value", _f),
+        ("race_cut_gained_time_ms", _i),
+        ("distance_to_deadline", _i),
+        ("race_cut_current_delta", _f),
+        ("session_state", SessionState),
+        ("timing_state", ctypes.c_byte * 256),
+        ("player_ping", _i),
+        ("player_latency", _i),
+        ("player_cpu_usage", _i),
+        ("player_cpu_usage_avg", _i),
+        ("player_qos", _i),
+        ("player_qos_avg", _i),
+        ("player_fps", _i),
+        ("player_fps_avg", _i),
+        ("driver_name", _c33),
+        ("driver_surname", _c33),
+        ("car_model", _c33),
+        ("is_in_pit_box", _b),
+        ("is_in_pit_lane", _b),
+        ("is_valid_lap", _b),
+        ("car_coordinates", _F3 * 60),
+        ("gap_ahead", _f),  # s
+        ("gap_behind", _f),  # s
+        ("active_cars", ctypes.c_uint8),
+        ("fuel_per_lap", _f),
+        ("fuel_estimated_laps", _f),
+        ("assists_state", ctypes.c_byte * 64),
+        ("max_fuel", _f),
+        ("max_turbo_boost", _f),
+        ("use_single_compound", _b),
+        ("car_ids", (ctypes.c_uint64 * 2) * 60),
     ]
 
 
@@ -290,10 +404,12 @@ class LiveSource:
         self._graphics = SharedBlock(GRAPHICS_TAG, Graphics)
         self._last_packet = None
         self._last_change = time.monotonic()
+        self.graphics = None  # the Graphics snapshot taken with the last read(), for the info panel
 
     def read(self):
         frame = self._physics.read()
         if frame is None:
+            self.graphics = None
             return None
         now = time.monotonic()
         if frame.packetId != self._last_packet:
@@ -306,7 +422,7 @@ class LiveSource:
 
         frame.absInAction = int(bool(frame.absInAction or frame.abs > 0))
         frame.tcInAction = int(bool(frame.tcInAction or frame.tc > 0))
-        graphics = self._graphics.read()
+        graphics = self.graphics = self._graphics.read()
         if graphics is not None:
             frame.absInAction |= graphics.abs_active
             frame.tcInAction |= graphics.tc_active

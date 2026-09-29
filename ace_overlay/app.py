@@ -94,6 +94,7 @@ def main():
     from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
     from .overlay import InputsOverlay
+    from .panel import InfoPanel
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # let Ctrl+C in the console quit
     app = QApplication(sys.argv)
@@ -104,13 +105,45 @@ def main():
                 else QSettings("ace-overlay", "ace-overlay"))
     overlay = InputsOverlay(source, settings)
     overlay.show()
+    panel = InfoPanel(source, settings, overlay.config)
+    panel.setVisible(overlay.config.show_panel)
+    windows = (overlay, panel)
 
     menu = QMenu()
-    move_action = QAction("Move overlay", menu, checkable=True)
-    move_action.toggled.connect(lambda on: overlay.set_locked(not on))
-    overlay.locked_changed.connect(lambda locked: move_action.setChecked(not locked))
+    # "Move overlays" unpins/pins both windows; each window's own pin still works on its own.
+    move_action = QAction("Move overlays", menu, checkable=True)
+    moving_all = False
+
+    def move_all(on):
+        nonlocal moving_all
+        moving_all = True  # don't let each window's locked_changed flip the checkbox mid-loop
+        for w in windows:
+            w.set_locked(not on)
+        moving_all = False
+
+    def sync_move_action(_locked):
+        if not moving_all:
+            move_action.setChecked(not all(w.locked for w in windows))
+
+    move_action.toggled.connect(move_all)
+    for w in windows:
+        w.locked_changed.connect(sync_move_action)
     menu.addAction(move_action)
+    panel_action = QAction("Show info panel", menu, checkable=True, checked=overlay.config.show_panel)
+    menu.addAction(panel_action)
     menu.addAction("Settings…", overlay.open_settings)
+
+    def set_panel_visible(on):
+        if overlay.config.show_panel != on:  # from the tray: save it like the settings window does
+            overlay.config.show_panel = on
+            overlay.config.save(settings)
+            if overlay.settings_dialog:
+                overlay.settings_dialog.load(overlay.config)
+        panel.setVisible(on)
+        panel_action.setChecked(on)
+
+    panel_action.toggled.connect(set_panel_visible)
+    overlay.config_changed.connect(lambda: set_panel_visible(overlay.config.show_panel))
     menu.addSeparator()
     menu.addAction("Quit", app.quit)
 

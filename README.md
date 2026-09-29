@@ -31,12 +31,33 @@
   bands, with the average beside it, laid out like the car seen from above.
 - **Side-aware TC and ABS lights.** Flashing lights on both sides of the HUD. The side that lights
   up is the side the system is working on.
+- **Info panel.** A second, separately placed window for race-engineer data: live delta to your best
+  lap, lap times, fuel per lap and laps of fuel left, fuel needed to reach the end of the session,
+  tyre pressures against the recommended pressure, brake bias, TC/ABS/engine map settings, weather,
+  and gaps.
 - **Stays out of the way.** Always on top and click-through, so the mouse goes straight to the game.
   Pin it in place, or unpin it and drag it anywhere.
 - **Portable.** A single folder with no installer, no game files touched, and settings saved next
   to the app.
 
 ## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/info-panel.png" alt="Info panel" width="300">
+    </td>
+    <td width="50%">
+      <p><b>Info panel</b></p>
+      <sub>
+        <b>Timing:</b> live delta to your best lap (green = faster), predicted, current, last and best laps, and an INVALID tag when the lap is cut.<br><br>
+        <b>Fuel:</b> litres left, average use per lap and laps remaining, plus how much fuel you need (or have spare) to reach the end of the session.<br><br>
+        <b>Tyre pressures:</b> live pressure per tyre, colour-coded against the recommended pressure, with how many psi to adjust.<br><br>
+        <b>Car:</b> brake bias, TC, ABS and engine map settings, air and track temperature, and gaps to the cars ahead and behind.
+      </sub>
+    </td>
+  </tr>
+</table>
 
 <table>
   <tr>
@@ -106,9 +127,9 @@ python -m venv .venv
 
 | Control | What it does |
 | --- | --- |
-| 📌 **Pin** (right of the overlay) | Click to unpin, drag the overlay into place, then click again to lock it. When locked, clicks pass through to the game. The position is remembered. |
-| ⚙️ **Gear** (under the pin) | Opens the settings window. |
-| **Tray icon** | Right-click for *Move overlay*, *Settings…* and *Quit*. |
+| 📌 **Pin** (right of each window) | Click to unpin, drag the window into place, then click again to lock it. When locked, clicks pass through to the game. The HUD and the info panel each have their own pin, and positions are remembered. |
+| ⚙️ **Gear** (under the HUD's pin) | Opens the settings window. |
+| **Tray icon** | Right-click for *Move overlays* (unpins both windows), *Show info panel*, *Settings…* and *Quit*. |
 
 The pin and gear fade out while you drive and light up when you hover over them.
 
@@ -121,6 +142,7 @@ The pin and gear fade out while you drive and light up when you hover over them.
 | Colour 2 from / Colour 3 from | 86 % / 92 % | Where each light switches colour. Every light takes the colour of the RPM % it represents. |
 | Flash at | 97 % | RPM where the whole strip flashes. |
 | Colours | green / yellow / red / blue | One swatch per zone plus the flash colour. |
+| Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
 
 ### Reading the tyres
 

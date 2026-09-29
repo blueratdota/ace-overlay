@@ -1,7 +1,7 @@
 import ctypes
 import unittest
 
-from ace_overlay.shm import Graphics, Physics, TyreState
+from ace_overlay.shm import Electronics, Graphics, Physics, SessionState, TyreState
 
 
 class PhysicsLayoutTest(unittest.TestCase):
@@ -23,17 +23,31 @@ class PhysicsLayoutTest(unittest.TestCase):
 
 
 class GraphicsLayoutTest(unittest.TestCase):
-    """Offsets verified against the live game (RPM matched physics, tyre compound name decoded)."""
+    """Offsets verified against the live game (RPM matched physics; tyre compound, car model, lap times
+    and fuel decoded correctly)."""
 
-    def test_tyre_state_size(self):
-        self.assertEqual(ctypes.sizeof(TyreState), 256)
+    def test_substruct_sizes(self):
+        for struct, size in ((TyreState, 256), (Electronics, 128), (SessionState, 256)):
+            with self.subTest(struct=struct.__name__):
+                self.assertEqual(ctypes.sizeof(struct), size)
+
+    def test_size(self):
+        self.assertEqual(ctypes.sizeof(Graphics), 4900)
 
     def test_offsets(self):
-        expected = {"rpm": 40, "tc_active": 45, "abs_active": 46, "tyres": 220}
+        expected = {
+            "rpm": 40, "tc_active": 45, "abs_active": 46, "tyres": 220, "npos": 1244,
+            "fuel_liter_per_lap": 1460, "laps_possible_with_fuel": 1464, "electronics": 1872,
+            "total_lap_count": 2384, "current_pos": 2388, "last_laptime_ms": 2396, "best_laptime_ms": 2400,
+            "session_state": 2476, "car_model": 3086, "is_in_pit_lane": 3120, "is_valid_lap": 3121,
+            "gap_ahead": 3844, "gap_behind": 3848, "fuel_per_lap": 3856, "max_fuel": 3928, "car_ids": 3940,
+        }
         for name, offset in expected.items():
             with self.subTest(field=name):
                 self.assertEqual(getattr(Graphics, name).offset, offset)
-        self.assertEqual(ctypes.sizeof(Graphics), 220 + 4 * 256)
+        self.assertEqual(Electronics.brake_bias.offset, 8)
+        self.assertEqual(SessionState.time_left_ms.offset, 48)
+        self.assertEqual(SessionState.total_lap.offset, 68)
 
 
 if __name__ == "__main__":

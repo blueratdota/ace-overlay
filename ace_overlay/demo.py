@@ -3,7 +3,7 @@
 import math
 import time
 
-from .shm import Physics
+from .shm import Graphics, Physics
 
 MAX_RPM = 8000
 # Top speed (km/h) at redline for each forward gear, indexed by the raw gear value (2 = 1st).
@@ -11,6 +11,9 @@ GEAR_TOP = {2: 70, 3: 100, 4: 130, 5: 160, 6: 190, 7: 250}
 FRONT = (True, True, False, False)  # FL, FR, RL, RR
 LEFT = (True, False, True, False)
 V_EXIT, V_TOP, V_APEX = 120.0, 225.0, 90.0  # km/h at lap start, end of straight, apex
+DEMO_LAP_MS = 92_000  # the info panel reports each 10 s demo lap as a 1:32 lap
+DEMO_COLD_PSI = (22.3, 22.3, 19.8, 25.0)  # FL, FR, RL, RR: fronts in the window when hot, rears one low / one high
+DEMO_WINDOW_PSI = (26.0, 28.5)  # ideal window; normalised pressure is 1.0 inside, ±1/3 per psi outside
 
 
 def lap_speed(t):
@@ -34,6 +37,7 @@ class DemoSource:
         self._packet = 0
         # [wheel][inner, middle, outer], starting a little cold so the tyres visibly warm up.
         self._temps = [[62.0, 60.0, 58.0] for _ in range(4)]
+        self.graphics = None  # Graphics snapshot from the last read(), like LiveSource
 
     def read(self):
         now = time.monotonic()
@@ -85,7 +89,44 @@ class DemoSource:
         p.slipRatio[3] = -lock * 0.6 + spin * 0.3  # RR
         for w in range(4):
             p.tyreTempI[w], p.tyreTempM[w], p.tyreTempO[w] = self._temps[w]
+        p.airTemp, p.roadTemp = 24.0, 33.0
+        self.graphics = self._graphics(now, t)
         return p
+
+    def _graphics(self, now, t):
+        """Info-panel data. The 10 s demo lap is reported as a 1:32 lap, ticking at that pace."""
+        g = Graphics()
+        elapsed = now - self._start
+        lap_index = int(elapsed // 10)
+        g.npos = t / 10
+        g.total_lap_count = 6 + lap_index
+        g.current_lap_time_ms = int(t / 10 * DEMO_LAP_MS)
+        g.best_laptime_ms = 91_842
+        g.last_laptime_ms = 91_842 + (lap_index * 137) % 900
+        g.delta_time_ms = int(-420 * math.sin(t / 10 * math.pi) + 60)
+        g.predicted_lap_time_ms = g.best_laptime_ms + g.delta_time_ms
+        g.is_valid_lap = lap_index % 5 != 3
+        g.session_state.time_left_ms = max(0, int(25 * 60_000 - elapsed * DEMO_LAP_MS / 10))
+        g.current_pos, g.total_drivers = 3, 16
+        g.gap_ahead, g.gap_behind = 1.2 + 0.3 * math.sin(elapsed / 7), -(0.8 + 0.2 * math.cos(elapsed / 5))
+
+        g.max_fuel = 55.0
+        g.fuel_liter_per_lap = g.fuel_per_lap = 2.45
+        g.fuel_liter_current_quantity = 42.0 - (elapsed / 10 % 15) * 2.45
+        g.laps_possible_with_fuel = g.fuel_liter_current_quantity / 2.45
+
+        e = g.electronics
+        e.tc_level, e.abs_level, e.engine_map_level, e.brake_bias = 3, 2, 1, 0.565
+
+        for w, tyre in enumerate(g.tyres):
+            inner, middle, outer = self._temps[w]
+            # Graphics faces are car-relative: left wheels have outer on the left.
+            tyre.temperature_left, tyre.temperature_right = (outer, inner) if LEFT[w] else (inner, outer)
+            tyre.temperature_center = middle
+            tyre.pressure = DEMO_COLD_PSI[w] + (middle - 30) * 0.09  # pressure rises with heat
+            low, high = DEMO_WINDOW_PSI
+            tyre.normalized_pressure = 1 + (min(0.0, tyre.pressure - low) + max(0.0, tyre.pressure - high)) / 3
+        return g
 
     def _update_tyres(self, dt, gas, brake, corner):
         """Each surface band chases a target set by load; the inner band runs hotter (camber)."""

@@ -26,6 +26,14 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   `TyreState.temperature_left/center/right`. Left/right are car-relative: left wheels have outer = left,
   right wheels have inner = left. Physics `absInAction` **never fires**. ABS shows up as `physics.abs`
   (0/1) and `graphics.abs_active`, which match exactly, so `LiveSource` ORs all three.
+- **The graphics block feeds the info panel** (`panel.py`): fuel (`fuel_liter_per_lap`,
+  `laps_possible_with_fuel`), lap times, `delta_time_ms`/`predicted_lap_time_ms` (0 in the pits),
+  `session_state.time_left_ms`/`total_lap` (0 = timed session), `electronics` (TC/ABS/map levels,
+  brake bias), and gaps. All verified live. `current_pos` is 0 in practice.
+- **There is no target tyre pressure.** `TyreState.normalized_pressure` is exactly 1.0 anywhere
+  inside the compound's ideal window (1.0 from about 27.0 to at least 31.6 psi on SuperCar tyres),
+  and 1/3 per psi below it (26.0 psi read 0.669). The over-window slope is assumed to be the same.
+  `pressure_adjust()` turns this into "add/remove ≈x psi".
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
   It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.

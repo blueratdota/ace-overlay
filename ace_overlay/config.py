@@ -4,7 +4,7 @@ from dataclasses import dataclass, fields
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QColorDialog, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QColorDialog, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QGroupBox,
                                QHBoxLayout, QPushButton, QSpinBox, QVBoxLayout, QWidget)
 
 
@@ -23,6 +23,7 @@ class Config:
     color2: str = "#ffd23f"
     color3: str = "#ff4d4d"
     flash_color: str = "#4d7cff"
+    show_panel: bool = True  # the separate info panel (timing, fuel, pressures, car settings)
 
     @classmethod
     def load(cls, settings):
@@ -93,6 +94,10 @@ class SettingsDialog(QDialog):
         rpm_form.addRow("Colour 3 from", self.row(self.rpm_zone3, self.color3))
         rpm_form.addRow("Flash at", self.row(self.rpm_flash, self.flash_color))
 
+        self.show_panel = QCheckBox("Show the info panel (timing, fuel, tyre pressures, car settings)")
+        panel_box = QGroupBox("Info panel")
+        QVBoxLayout(panel_box).addWidget(self.show_panel)
+
         buttons = QDialogButtonBox(QDialogButtonBox.RestoreDefaults | QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
         buttons.button(QDialogButtonBox.RestoreDefaults).clicked.connect(self.restore_defaults)
@@ -100,6 +105,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(trace_box)
         layout.addWidget(rpm_box)
+        layout.addWidget(panel_box)
         layout.addWidget(buttons)
 
         self.load(overlay.config)
@@ -107,6 +113,7 @@ class SettingsDialog(QDialog):
             spin.valueChanged.connect(self.apply)
         for button in (self.color1, self.color2, self.color3, self.flash_color):
             button.changed.connect(self.apply)
+        self.show_panel.toggled.connect(self.apply)
 
     @staticmethod
     def row(spin, color_button):
@@ -125,6 +132,7 @@ class SettingsDialog(QDialog):
             getattr(self, name).setValue(getattr(c, name))
         for name in ("color1", "color2", "color3", "flash_color"):
             getattr(self, name).set_color(getattr(c, name))
+        self.show_panel.setChecked(c.show_panel)
         self.rpm_flash.setMinimum(c.rpm_start + 1)
         self._loading = False
 
@@ -139,8 +147,9 @@ class SettingsDialog(QDialog):
             setattr(c, name, getattr(self, name).value())
         for name in ("color1", "color2", "color3", "flash_color"):
             setattr(c, name, getattr(self, name).color)
+        c.show_panel = self.show_panel.isChecked()
         c.save(self.overlay.settings)
-        self.overlay.update()
+        self.overlay.config_changed.emit()
 
     def restore_defaults(self):
         self.load(Config())

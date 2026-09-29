@@ -25,6 +25,7 @@ import ace_overlay.overlay as overlay_module  # noqa: E402
 from ace_overlay.config import Config  # noqa: E402
 from ace_overlay.demo import DemoSource  # noqa: E402
 from ace_overlay.overlay import InputsOverlay, SideButton  # noqa: E402
+from ace_overlay.panel import InfoPanel  # noqa: E402
 
 OUT = ROOT / "docs" / "images"
 TICK = 1 / 60
@@ -164,6 +165,13 @@ def main():
     still("move-mode.png", buttons=True)
     overlay.set_locked(True)
     overlay.hide()
+
+    # The info panel, mid-lap.
+    panel = InfoPanel(overlay.source, settings, overlay.config)
+    panel.timer.stop()
+    run_until(lambda f: 5.0 < lap_time() < 5.1)
+    panel.tick()
+    save_png(render(panel, 2), "info-panel.png")
 
     # Custom RPM colours + the settings window.
     overlay.config = Config(rpm_start=60, rpm_zone2=72, rpm_zone3=84, rpm_flash=95,
