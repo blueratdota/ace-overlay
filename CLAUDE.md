@@ -30,10 +30,14 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   `laps_possible_with_fuel`), lap times, `delta_time_ms`/`predicted_lap_time_ms` (0 in the pits),
   `session_state.time_left_ms`/`total_lap` (0 = timed session), `electronics` (TC/ABS/map levels,
   brake bias), and gaps. All verified live. `current_pos` is 0 in practice.
-- **There is no target tyre pressure.** `TyreState.normalized_pressure` is exactly 1.0 anywhere
-  inside the compound's ideal window (1.0 from about 27.0 to at least 31.6 psi on SuperCar tyres),
-  and 1/3 per psi below it (26.0 psi read 0.669). The over-window slope is assumed to be the same.
-  `pressure_adjust()` turns this into "add/remove ≈x psi".
+- **Tyre pressure follows bulk temperature exactly:** psi = garage psi + 0.096 × (`TyreState.temperature_c`
+  − 40 °C), with R² = 1.000 on all tyres. `temperature_c` equals physics `tyreCoreTemperature`.
+  There's no target pressure. The normalised values are exactly 1.0 inside a per-compound ideal
+  window and linear outside it: pressure 1/3 per psi, surface temperature 1/30 per °C, core 1/20 per
+  °C. SuperCar: pressure ≥ 27.0 psi (top edge not yet seen), surface 60–95 °C, core ≥ 60 °C.
+  `tyres.py` learns the windows live (saved under `tyres/…` in settings), projects each tyre to the
+  middle of its ideal temperature window, and recommends the garage pressure. Never judge pressure
+  without its temperature.
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
   It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.

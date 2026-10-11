@@ -4,6 +4,7 @@ import math
 import time
 
 from .shm import Graphics, Physics
+from .tyres import GARAGE_C, PSI_PER_C
 
 MAX_RPM = 8000
 # Top speed (km/h) at redline for each forward gear, indexed by the raw gear value (2 = 1st).
@@ -12,8 +13,15 @@ FRONT = (True, True, False, False)  # FL, FR, RL, RR
 LEFT = (True, False, True, False)
 V_EXIT, V_TOP, V_APEX = 120.0, 225.0, 90.0  # km/h at lap start, end of straight, apex
 DEMO_LAP_MS = 92_000  # the info panel reports each 10 s demo lap as a 1:32 lap
-DEMO_COLD_PSI = (22.3, 22.3, 19.8, 25.0)  # FL, FR, RL, RR: fronts in the window when hot, rears one low / one high
-DEMO_WINDOW_PSI = (26.0, 28.5)  # ideal window; normalised pressure is 1.0 inside, ±1/3 per psi outside
+DEMO_COLD_PSI = (26.0, 26.2, 24.6, 29.4)  # FL, FR, RL, RR garage pressures: fronts right, rears one low / one high
+DEMO_WINDOW_PSI = (27.0, 31.0)  # ideal pressure window; normalised = 1.0 inside, ±1/3 per psi outside
+DEMO_WINDOW_C = (60.0, 95.0)  # ideal temperature window (surface ±1/30 per °C, core ±1/20 per °C outside)
+
+
+def normalised(value, window, scale):
+    """The game's normalisation: exactly 1.0 inside the window, linear outside it."""
+    low, high = window
+    return 1.0 + (min(0.0, value - low) + max(0.0, value - high)) / scale
 
 
 def lap_speed(t):
@@ -35,8 +43,10 @@ class DemoSource:
         self._gear = 5
         self._shift_until = 0.0
         self._packet = 0
-        # [wheel][inner, middle, outer], starting a little cold so the tyres visibly warm up.
-        self._temps = [[62.0, 60.0, 58.0] for _ in range(4)]
+        # [wheel][inner, middle, outer] surface temperatures, plus a slower bulk (carcass) temperature.
+        # They start at the 40 °C garage temperature, like leaving the pits on fresh tyres.
+        self._temps = [[40.0, 40.0, 40.0] for _ in range(4)]
+        self._bulk = [40.0] * 4
         self.graphics = None  # Graphics snapshot from the last read(), like LiveSource
 
     def read(self):
@@ -123,9 +133,14 @@ class DemoSource:
             # Graphics faces are car-relative: left wheels have outer on the left.
             tyre.temperature_left, tyre.temperature_right = (outer, inner) if LEFT[w] else (inner, outer)
             tyre.temperature_center = middle
-            tyre.pressure = DEMO_COLD_PSI[w] + (middle - 30) * 0.09  # pressure rises with heat
-            low, high = DEMO_WINDOW_PSI
-            tyre.normalized_pressure = 1 + (min(0.0, tyre.pressure - low) + max(0.0, tyre.pressure - high)) / 3
+            tyre.temperature_c = self._bulk[w]
+            # The game's model: pressure follows bulk temperature from the 40 °C garage reference.
+            tyre.pressure = DEMO_COLD_PSI[w] + PSI_PER_C * (self._bulk[w] - GARAGE_C)
+            tyre.normalized_pressure = normalised(tyre.pressure, DEMO_WINDOW_PSI, 3.0)
+            tyre.normalized_temperature_center = normalised(middle, DEMO_WINDOW_C, 30.0)
+            tyre.normalized_temperature_core = normalised(self._bulk[w], DEMO_WINDOW_C, 20.0)
+            name = b"Demo Slick"
+            tyre.compound_front = tyre.compound_rear = name
         return g
 
     def _update_tyres(self, dt, gas, brake, corner):
@@ -140,3 +155,6 @@ class DemoSource:
             rate = 0.6 if load > speed_heat else 0.15  # heats up faster than it cools
             for band in range(3):
                 self._temps[w][band] += (targets[band] - self._temps[w][band]) * min(1.0, rate * dt)
+            # The carcass lags the surface and runs cooler.
+            surface = sum(self._temps[w]) / 3
+            self._bulk[w] += (surface - 12 - self._bulk[w]) * min(1.0, 0.08 * dt)

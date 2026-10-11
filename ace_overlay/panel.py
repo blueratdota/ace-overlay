@@ -6,10 +6,10 @@ from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter
 
 from .overlay import BRAKE, CLUTCH, DIM, TEXT, THROTTLE, TRACK, YELLOW, OverlayWindow, PinButton
+from .tyres import EPS, TyreAdvisor
 
-PANEL_W, PANEL_H, PAD = 300, 350, 12
-PSI_PER_NORMALISED = 3.0  # psi per unit of the game's normalised pressure (see pressure_adjust)
-PRESSURE_WINDOW_EPS = 0.005  # normalised pressure this close to 1.0 counts as inside the window
+PANEL_W, PANEL_H, PAD = 300, 364, 12
+PRESSURE_OK_PSI = 0.5  # recommended change this small counts as on target
 
 
 def lap_time(ms):
@@ -48,21 +48,12 @@ def laps_to_finish(g):
     return None
 
 
-def pressure_adjust(tyre):
-    """psi to add (+) or remove (−) to bring the tyre into its compound's ideal window, 0.0 when it's
-    in the window, or None if the game gives no verdict.
-
-    The game doesn't publish a target pressure. Its normalised pressure is exactly 1.0 anywhere
-    inside the ideal window, and moves away from 1.0 outside it. Measured live on the SuperCar
-    compound, that's 1/3 per psi below the window (26.0 psi read 0.669 against a 27.0 psi lower
-    edge); the same slope is assumed above it.
-    """
+def live_verdict(tyre):
+    """The game's own current verdict: 'LOW' / 'OK' / 'HIGH' for the pressure right now, or None."""
     norm = tyre.normalized_pressure
     if norm <= 0:
         return None
-    if abs(norm - 1.0) < PRESSURE_WINDOW_EPS:
-        return 0.0
-    return (1.0 - norm) * PSI_PER_NORMALISED
+    return "OK" if abs(norm - 1.0) <= EPS else "LOW" if norm < 1 else "HIGH"
 
 
 class InfoPanel(OverlayWindow):
@@ -73,6 +64,9 @@ class InfoPanel(OverlayWindow):
         self.source = source
         self.config = config
         self.frame = self.graphics = None
+        self.advisor = TyreAdvisor(settings)
+        self.advisor.load()
+        self.ticks = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(100)  # everything here changes slowly; 10 Hz is plenty
@@ -80,6 +74,11 @@ class InfoPanel(OverlayWindow):
     def tick(self):
         self.frame = self.source.read()
         self.graphics = self.source.graphics
+        if self.graphics is not None:
+            self.advisor.observe(self.graphics)
+            self.ticks += 1
+            if self.ticks % 50 == 0:  # persist learned tyre windows every 5 s
+                self.advisor.save()
         self.update()
 
     # --- drawing helpers ---------------------------------------------------
@@ -128,8 +127,8 @@ class InfoPanel(OverlayWindow):
         self.draw_fuel(p, g, 132)
         self.separator(p, 198)
         self.draw_pressures(p, g, 206)
-        self.separator(p, 280)
-        self.draw_car(p, f, g, 288)
+        self.separator(p, 294)
+        self.draw_car(p, f, g, 302)
 
     def draw_header(self, p, g, y):
         col = (PANEL_W - 2 * PAD) / 3
@@ -204,27 +203,33 @@ class InfoPanel(OverlayWindow):
             self.value(p, QRectF(PANEL_W - PAD - 130, y + 46, 130, 14), text, 9, color, Qt.AlignRight)
 
     def draw_pressures(self, p, g, y):
-        self.label(p, QRectF(PAD, y, 260, 10), "TYRE PRESSURE  psi   (vs. the compound's ideal window)")
-        cell_w = (PANEL_W - 2 * PAD - 16) / 2
+        """Per tyre: live pressure, the pressure it will run at ideal temperature, and the garage
+        pressure to set. Colour follows the recommended change, not the momentary pressure, so a cold
+        tyre that will warm into the window isn't flagged."""
+        self.label(p, QRectF(PAD, y, 270, 10), "TYRE PRESSURE  psi   now · hot at ideal temp · garage")
+        cell_w, cell_h = (PANEL_W - 2 * PAD - 16) / 2, 32
         for w, tyre in enumerate(g.tyres):  # FL, FR, RL, RR
             x = PAD + (w % 2) * (cell_w + 16)
-            cy = y + 14 + (w // 2) * 26
-            adjust = pressure_adjust(tyre)
-            if adjust is None:
-                color, detail = TEXT, ""
-            elif adjust == 0.0:
-                color, detail = THROTTLE, "OK"
-            elif adjust > 0:
-                color, detail = CLUTCH, f"ADD ≈{adjust:.1f}"
-            else:
-                color, detail = BRAKE, f"REMOVE ≈{-adjust:.1f}"
+            cy = y + 14 + (w // 2) * (cell_h + 4)
+            advice = self.advisor.advise(tyre, w)
+            if advice is not None:
+                off = advice.adjust
+                color = THROTTLE if abs(off) <= PRESSURE_OK_PSI else CLUTCH if off > 0 else BRAKE
+                hot = f"HOT {advice.hot_psi:.1f}"
+                garage = f"SET {advice.garage_psi:.1f}  {signed(off, 1)}"
+            else:  # windows for this compound not learned yet: show the game's live verdict
+                verdict = live_verdict(tyre)
+                color = {"OK": THROTTLE, "LOW": CLUTCH, "HIGH": BRAKE}.get(verdict, TEXT)
+                hot, garage = (verdict or ""), "learning window…"
             p.setPen(Qt.NoPen)
             p.setBrush(TRACK)
-            p.drawRoundedRect(QRectF(x, cy, cell_w, 22), 4, 4)
+            p.drawRoundedRect(QRectF(x, cy, cell_w, cell_h), 4, 4)
             p.setBrush(color)
-            p.drawRoundedRect(QRectF(x, cy, 4, 22), 2, 2)
-            self.value(p, QRectF(x + 10, cy, 44, 22), f"{tyre.pressure:.1f}", 12, color)
-            self.value(p, QRectF(x + 50, cy, cell_w - 56, 22), detail, 8, DIM, Qt.AlignRight)
+            p.drawRoundedRect(QRectF(x, cy, 4, cell_h), 2, 2)
+            self.value(p, QRectF(x + 10, cy + 1, 50, 16), f"{tyre.pressure:.1f}", 12, color)
+            self.value(p, QRectF(x + 56, cy + 1, cell_w - 62, 16), hot, 8, DIM, Qt.AlignRight)
+            self.value(p, QRectF(x + 10, cy + 17, cell_w - 16, 13), garage, 8,
+                       TEXT if advice is not None else DIM, Qt.AlignRight)
 
     def draw_car(self, p, f, g, y):
         e = g.electronics
