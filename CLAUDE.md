@@ -42,8 +42,13 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   Status is 2 both in the box and on track, and **3 in a replay** (the graphics packetId also stops
   advancing then). The HUD's "only while driving" setting uses this with a 2 s hide delay, and always
   shows while unpinned. The setting is off by default.
-- **Turbo:** `graphics.turbo_boost` (bar, relative) and `max_turbo_boost` (0.66 on the Golf 8 R,
-  0 = naturally aspirated). Boost reads 0 when revving stationary (no load).
+- **Turbo:** `graphics.turbo_boost` (bar, relative). `max_turbo_boost` **can't tell turbo cars apart**:
+  it read 0.66 on the naturally aspirated BMW M3 E46 CSL, where every boost field stayed 0 over 2,000
+  full-throttle samples. Live boost on a real turbo car is still unverified. The HUD bar therefore shows
+  boost only once `turbo_boost` has been non-zero for the current car, and otherwise live
+  `current_torque` (Nm) scaled to the session peak (`track_engine` / `draw_engine_bar`).
+- **Always log `graphics.car_model` in live probes.** The user switches cars between sessions, and
+  findings must be attributed to the right car.
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
   It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.

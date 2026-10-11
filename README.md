@@ -27,12 +27,14 @@
   your live input, and the time window (2–30 s) can be changed on the fly.
 - **Shift lights.** A full-width, 15-light RPM strip with configurable colour zones and flash point.
 - **Gear, speed and RPM** at a glance.
-- **Turbo boost.** A boost bar under the RPM, filled relative to the car's maximum boost, with the
-  pressure in psi (negative off throttle). It's dimmed on naturally aspirated cars.
+- **Boost / torque bar.** Under the RPM: turbo boost in psi (filled relative to the car's maximum,
+  negative off throttle) when the game sends live boost for the car. Otherwise it shows live engine
+  torque in Nm, filled against the session peak, which includes the turbo's effect.
 - **Tyre temperatures.** Each tyre shows inner, middle and outer surface temperatures as colour
   bands, with the average beside it, laid out like the car seen from above.
 - **Side-aware TC and ABS lights.** Flashing lights on both sides of the HUD. The side that lights
-  up is the side the system is working on.
+  up is the side the system is working on. The input trace also changes colour while they work:
+  the brake line turns orange under ABS, and the throttle line turns yellow under TC.
 - **Info panel.** A second, separately placed window for race-engineer data: live delta to your best
   lap, lap times, fuel per lap and laps of fuel left, fuel needed to reach the end of the session,
   tyre pressures against the recommended pressure, brake bias, TC/ABS/engine map settings, weather,

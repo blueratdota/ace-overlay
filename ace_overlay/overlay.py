@@ -4,7 +4,7 @@ import time
 from collections import deque
 from itertools import islice
 
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -47,6 +47,7 @@ AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step trigger
 SIDE_SLIP_SHARE = 0.7  # a side lights if its wheel slip is at least this share of the worst side
 HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stops, to avoid flicker
 BAR_TO_PSI = 14.5038
+TORQUE_FLOOR_NM = 100.0  # minimum full-scale for the torque bar
 
 # Tyre surface temperature (°C) -> colour. Generic racing-slick window; tune per compound.
 TYRE_STOPS = [(50, QColor("#3b6cff")), (75, THROTTLE), (95, THROTTLE), (105, YELLOW), (115, BRAKE)]
@@ -256,7 +257,9 @@ class InputsOverlay(OverlayWindow):
         self.settings_dialog = None
         self.frame = self.graphics = None
         self.last_driving = float("-inf")  # last time is_driving() was true
-        self.trace = deque()  # (time, gas, brake, clutch) for every tick
+        self.engine_car, self.boost_live, self.peak_torque = None, False, 0.0  # see track_engine()
+        self.trace = deque()  # (time, gas, brake, clutch, tc_working, abs_working) for every tick
+        self.aid_trace_until = {"tc": 0.0, "abs": 0.0}
         self.blink = 0
         # (aid, side) -> time the light stops flashing; side 0 = left, 1 = right
         self.aid_until = {(aid, side): 0.0 for aid in ("tc", "abs") for side in (0, 1)}
@@ -280,20 +283,25 @@ class InputsOverlay(OverlayWindow):
     def tick(self):
         f = self.frame = self.source.read()
         self.graphics = self.source.graphics
+        if self.graphics is not None:
+            self.track_engine(self.graphics)
         now = time.monotonic()
         if is_driving(self.graphics):
             self.last_driving = now
         self.update_visibility(now)
         if f is not None:
-            # Keep every reading for the longest window the settings allow.
-            self.trace.append((now, f.gas, f.brake, f.clutch))
-            while self.trace[0][0] < now - TRACE_MAX_SECONDS:
-                self.trace.popleft()
             for aid, active in (("tc", f.tcInAction), ("abs", f.absInAction)):
                 if active:
+                    self.aid_trace_until[aid] = now + AID_HOLD_S
                     for side, lit in enumerate(slipping_sides(f.slipRatio)):
                         if lit:
                             self.aid_until[aid, side] = now + AID_HOLD_S
+            # Keep every reading for the longest window the settings allow, with whether TC / ABS were
+            # working (held like the lights, so a flickering flag gives a solid stretch of colour).
+            self.trace.append((now, f.gas, f.brake, f.clutch,
+                               now < self.aid_trace_until["tc"], now < self.aid_trace_until["abs"]))
+            while self.trace[0][0] < now - TRACE_MAX_SECONDS:
+                self.trace.popleft()
         self.blink = (self.blink + 1) % 16
         self.update()
 
@@ -323,7 +331,7 @@ class InputsOverlay(OverlayWindow):
         self.draw_pedals(p, f)
         self.draw_trace(p)
         self.draw_gear_speed(p, f)
-        self.draw_boost(p)
+        self.draw_engine_bar(p)
         self.draw_aids(p)
         self.draw_tyres(p, f)
 
@@ -379,18 +387,23 @@ class InputsOverlay(OverlayWindow):
         visible = list(islice(self.trace, max(0, first - 1), None))
         p.save()
         p.setClipRect(QRectF(x0, CT, w, CH))
-        for idx, color, width in ((3, CLUTCH, 1.5), (2, BRAKE, 2), (1, THROTTLE, 2)):
-            path = QPainterPath()
-            for i, sample in enumerate(visible):
-                x = x0 + w - (now - sample[0]) * px_per_s
-                y = CT + CH - 2 - (CH - 4) * max(0.0, min(1.0, sample[idx]))
-                if i:
-                    path.lineTo(x, y)
-                else:
-                    path.moveTo(x, y)
-            p.setPen(QPen(color, width))
-            p.setBrush(Qt.NoBrush)
-            p.drawPath(path)
+        p.setBrush(Qt.NoBrush)
+        # (value index, colour, width, flag index, colour while that aid works): the brake line turns
+        # orange while ABS works and the throttle line yellow while TC cuts, like the lights.
+        for idx, color, width, flag, aid_color in ((3, CLUTCH, 1.5, None, None), (2, BRAKE, 2, 5, ORANGE),
+                                                   (1, THROTTLE, 2, 4, YELLOW)):
+            points = [(x0 + w - (now - s[0]) * px_per_s, CT + CH - 2 - (CH - 4) * max(0.0, min(1.0, s[idx])),
+                       flag is not None and s[flag]) for s in visible]
+            # Split the line into runs of one colour; a segment takes the state of its newer point.
+            run, run_lit = QPainterPath(QPointF(*points[0][:2])), points[1][2]
+            for (x, y, lit) in points[1:]:
+                if lit != run_lit:
+                    p.setPen(QPen(aid_color if run_lit else color, width + (0.5 if run_lit else 0)))
+                    p.drawPath(run)
+                    run, run_lit = QPainterPath(run.currentPosition()), lit
+                run.lineTo(x, y)
+            p.setPen(QPen(aid_color if run_lit else color, width + (0.5 if run_lit else 0)))
+            p.drawPath(run)
         p.restore()
 
     def draw_gear_speed(self, p, f):
@@ -412,33 +425,46 @@ class InputsOverlay(OverlayWindow):
         p.setFont(QFont("Consolas", 13, QFont.Bold))
         p.drawText(QRectF(right_x, CT + 54, right_w, 20), Qt.AlignRight | Qt.AlignVCenter, f"{f.rpms}")
 
-    def draw_boost(self, p):
-        """Turbo boost under the gear / RPM. Fill is boost relative to the car's maximum; the number
-        is in psi and can go negative (vacuum) off throttle. Dim on naturally aspirated cars."""
+    def track_engine(self, g):
+        """Per-car state for the engine bar: whether the game sends live boost, and peak torque so far.
+        Reset when the car changes."""
+        car = bytes(g.car_model)
+        if car != self.engine_car:
+            self.engine_car, self.boost_live, self.peak_torque = car, False, 0.0
+        if abs(g.turbo_boost) > 1e-3:
+            self.boost_live = True  # some cars (e.g. the Golf 8 R) only publish max_turbo_boost
+        self.peak_torque = max(self.peak_torque, g.current_torque)
+
+    def draw_engine_bar(self, p):
+        """Bar under the gear / RPM. Turbo boost in psi (fill relative to the car's maximum, negative
+        off throttle) when the game sends live boost; otherwise live engine torque in Nm, filled
+        against the most the engine has produced this session, which includes the turbo's effect."""
         g = self.graphics
-        has_turbo = g is not None and g.max_turbo_boost > 0
+        if g is not None and self.boost_live and g.max_turbo_boost > 0:
+            label, frac = "BOOST psi", g.turbo_boost / g.max_turbo_boost
+            psi = g.turbo_boost * BAR_TO_PSI
+            text = f"{psi:.1f}" if psi >= -0.05 else f"−{-psi:.1f}"
+        elif g is not None:
+            # Floor the scale so idling or an engine that's off doesn't read as a full bar.
+            scale = max(self.peak_torque, TORQUE_FLOOR_NM)
+            label, frac, text = "TORQUE Nm", g.current_torque / scale, f"{max(0.0, g.current_torque):.0f}"
+        else:
+            label, frac, text = "BOOST psi", 0.0, "–"
+
         row = QRectF(DASH_X, BOOST_Y, DASH_W, BOOST_H)
-        label_w, value_w = 38, 34
+        label_w, value_w = 58, 28
         p.setPen(DIM)
         p.setFont(QFont("Segoe UI", 7, QFont.Bold))
-        p.drawText(QRectF(row.x(), row.y(), label_w, row.height()), Qt.AlignLeft | Qt.AlignVCenter, "BOOST")
-
+        p.drawText(QRectF(row.x(), row.y(), label_w, row.height()), Qt.AlignLeft | Qt.AlignVCenter, label)
         bar = QRectF(row.x() + label_w, row.y() + (row.height() - 6) / 2, row.width() - label_w - value_w - 4, 6)
         p.setPen(Qt.NoPen)
         p.setBrush(TRACK)
         p.drawRoundedRect(bar, 3, 3)
-        value = QRectF(row.right() - value_w, row.y(), value_w, row.height())
-        p.setFont(QFont("Consolas", 9, QFont.Bold))
-        if not has_turbo:
-            p.setPen(DIM)
-            p.drawText(value, Qt.AlignRight | Qt.AlignVCenter, "–")
-            return
-        frac = max(0.0, min(1.0, g.turbo_boost / g.max_turbo_boost))
         p.setBrush(BOOST)
-        p.drawRoundedRect(QRectF(bar.x(), bar.y(), bar.width() * frac, bar.height()), 3, 3)
-        psi = g.turbo_boost * BAR_TO_PSI
-        p.setPen(TEXT)
-        p.drawText(value, Qt.AlignRight | Qt.AlignVCenter, f"{psi:.1f}" if psi >= -0.05 else f"−{-psi:.1f}")
+        p.drawRoundedRect(QRectF(bar.x(), bar.y(), bar.width() * max(0.0, min(1.0, frac)), bar.height()), 3, 3)
+        p.setPen(TEXT if text != "–" else DIM)
+        p.setFont(QFont("Consolas", 9, QFont.Bold))
+        p.drawText(QRectF(row.right() - value_w, row.y(), value_w, row.height()), Qt.AlignRight | Qt.AlignVCenter, text)
 
     def draw_aids(self, p):
         """TC above ABS on each side of the overlay; a side flashes while that side is intervening."""

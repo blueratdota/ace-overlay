@@ -9,9 +9,9 @@ What the game does (measured live on the Golf 8 R's SuperCar tyres, 2026-09-29):
   verdict as a normalised value: exactly 1.0 anywhere inside the window, and moving away linearly
   outside it (pressure: 1/3 per psi; surface temperature: 1/30 per °C; core: 1/20 per °C).
 
-So a recommendation has to project each tyre to its ideal operating temperature before judging its
-pressure. A cold tyre at 26 psi isn't "low" if it'll be at 30 psi once warm. The windows are learned
-from the normalised values as they come in, so they work for any compound.
+So a recommendation has to judge each tyre's pressure across its working temperatures. A cold tyre
+at 26 psi isn't "low" if it'll be inside the window once warm. Windows are seeded from measurements
+(KNOWN_WINDOWS) and learned from the normalised values as they come in, so they work for any compound.
 """
 
 PSI_PER_C = 0.096  # pressure rise per °C of bulk tyre temperature
@@ -52,29 +52,37 @@ class Window:
         else:
             self.high = value - (norm - 1.0) * scale
 
-    def target(self):
-        """Middle of the window, or None until both edges are known."""
-        if self.low is None or self.high is None:
-            return None
-        return (self.low + self.high) / 2
+
+# Windows measured live, as (low, high) with None where an edge hasn't been seen. They seed each
+# compound; live learning refines them. The game's windows belong to the compound, not the car.
+KNOWN_WINDOWS = {
+    # Golf 8 R and BMW M3 E46 CSL, 2026-09-29 / 2026-10-11
+    "SuperCar (SC)": {"pressure": (27.0, None), "surface": (60.0, 95.0), "core": (60.0, None)},
+}
+MARGIN_PSI = 0.5  # aim this far inside the pressure window
 
 
 class Compound:
-    def __init__(self):
+    def __init__(self, name=""):
         self.pressure = Window(default_scale=3.0)
         self.surface = Window(default_scale=30.0)
         self.core = Window(default_scale=20.0)
+        for quantity, (low, high) in KNOWN_WINDOWS.get(name, {}).items():
+            window = getattr(self, quantity)
+            window.low, window.high = low, high
 
-    def target_temperature(self):
-        """Bulk temperature to judge pressure at: the middle of the core window, else of the surface window."""
-        return self.core.target() or self.surface.target()
+    def temperature_window(self):
+        """(low, high) of the working temperature window for the bulk temperature that pressure
+        follows: core edges where known, else surface edges. Either may be None."""
+        return (self.core.low if self.core.low is not None else self.surface.low,
+                self.core.high if self.core.high is not None else self.surface.high)
 
 
 class Advice:
-    def __init__(self, hot_psi, target_psi, adjust, garage_psi):
-        self.hot_psi = hot_psi  # this tyre's pressure once at the target temperature
-        self.target_psi = target_psi  # the middle of the pressure window
-        self.adjust = adjust  # psi to add (+) or remove (−); the same at the garage and on track
+    def __init__(self, ref_c, hot_psi, adjust, garage_psi):
+        self.ref_c = ref_c  # the ideal temperature the hot pressure is quoted at
+        self.hot_psi = hot_psi  # this tyre's pressure at ref_c
+        self.adjust = adjust  # psi to add (+) or remove (−); 0.0 = fine. Same at the garage and on track
         self.garage_psi = garage_psi  # recommended garage (40 °C) pressure
 
 
@@ -119,7 +127,9 @@ class TyreAdvisor:
                         self._saved[key] = round(value, 3)
 
     def compound(self, name):
-        return self.compounds.setdefault(name, Compound())
+        if name not in self.compounds:
+            self.compounds[name] = Compound(name)
+        return self.compounds[name]
 
     def observe(self, graphics):
         for w, tyre in enumerate(graphics.tyres):
@@ -129,15 +139,30 @@ class TyreAdvisor:
             c.core.observe(tyre.temperature_c, tyre.normalized_temperature_core)
 
     def advise(self, tyre, wheel):
-        """Advice for one tyre, or None until the windows for its compound are known."""
+        """Advice for one tyre, or None while its compound has no usable window edges.
+
+        A well-set tyre is inside the pressure window from the moment it reaches working temperature
+        (the low edge of the temperature window), and still inside it at the top of the temperature
+        window. Each check runs only when the edges it needs are known, so an unseen upper edge
+        doesn't block advice.
+        """
         c = self.compound(compound_name(tyre, wheel))
-        target_c, target_psi = c.target_temperature(), c.pressure.target()
-        if target_c is None or target_psi is None or tyre.temperature_c <= 0:
+        low_c, high_c = c.temperature_window()
+        low_psi, high_psi = c.pressure.low, c.pressure.high
+        if low_c is None or (low_psi is None and high_psi is None) or tyre.temperature_c <= 0:
             return None
-        hot = tyre.pressure + PSI_PER_C * (target_c - tyre.temperature_c)
         garage_now = tyre.pressure - PSI_PER_C * (tyre.temperature_c - GARAGE_C)
-        adjust = target_psi - hot
-        return Advice(hot, target_psi, adjust, garage_now + adjust)
+
+        def at(temp_c):
+            return garage_now + PSI_PER_C * (temp_c - GARAGE_C)
+
+        adjust = 0.0
+        if low_psi is not None and at(low_c) < low_psi + MARGIN_PSI:
+            adjust = low_psi + MARGIN_PSI - at(low_c)
+        elif high_psi is not None and high_c is not None and at(high_c) > high_psi - MARGIN_PSI:
+            adjust = high_psi - MARGIN_PSI - at(high_c)
+        ref_c = (low_c + high_c) / 2 if high_c is not None else low_c
+        return Advice(ref_c, at(ref_c), adjust, garage_now + adjust)
 
 
 def compound_name(tyre, wheel):

@@ -117,6 +117,7 @@ class DemoSource:
         g = Graphics()
         g.status = STATUS_LIVE  # out on track, so "only while driving" shows the HUD
         g.max_turbo_boost, g.turbo_boost = DEMO_MAX_BOOST, self._boost
+        g.current_torque = 280 + 140 * max(0.0, self._boost) / DEMO_MAX_BOOST if self._boost > 0 else -40.0
         elapsed = now - self._start
         lap_index = int(elapsed // 10)
         g.npos = t / 10
@@ -150,8 +151,8 @@ class DemoSource:
             tyre.normalized_pressure = normalised(tyre.pressure, DEMO_WINDOW_PSI, 3.0)
             tyre.normalized_temperature_center = normalised(middle, DEMO_WINDOW_C, 30.0)
             tyre.normalized_temperature_core = normalised(self._bulk[w], DEMO_WINDOW_C, 20.0)
-            name = b"Demo Slick"
-            tyre.compound_front = tyre.compound_rear = name
+            # Same windows as the measured SuperCar compound, so the advice works from the first second.
+            tyre.compound_front = tyre.compound_rear = b"SuperCar (SC)"
         return g
 
     def _update_tyres(self, dt, gas, brake, corner):

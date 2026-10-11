@@ -9,7 +9,6 @@ from .overlay import BRAKE, CLUTCH, DIM, TEXT, THROTTLE, TRACK, YELLOW, OverlayW
 from .tyres import EPS, TyreAdvisor
 
 PANEL_W, PANEL_H, PAD = 300, 364, 12
-PRESSURE_OK_PSI = 0.5  # recommended change this small counts as on target
 
 
 def lap_time(ms):
@@ -203,10 +202,10 @@ class InfoPanel(OverlayWindow):
             self.value(p, QRectF(PANEL_W - PAD - 130, y + 46, 130, 14), text, 9, color, Qt.AlignRight)
 
     def draw_pressures(self, p, g, y):
-        """Per tyre: live pressure, the pressure it will run at ideal temperature, and the garage
-        pressure to set. Colour follows the recommended change, not the momentary pressure, so a cold
-        tyre that will warm into the window isn't flagged."""
-        self.label(p, QRectF(PAD, y, 270, 10), "TYRE PRESSURE  psi   now · hot at ideal temp · garage")
+        """Per tyre: live pressure, its pressure at the ideal temperature, and the garage pressure to
+        set. Colour follows the recommended change, not the momentary pressure, so a cold tyre that
+        will warm into the window isn't flagged."""
+        self.label(p, QRectF(PAD, y, 270, 10), "TYRE PRESSURE  psi   now · at ideal temp · garage")
         cell_w, cell_h = (PANEL_W - 2 * PAD - 16) / 2, 32
         for w, tyre in enumerate(g.tyres):  # FL, FR, RL, RR
             x = PAD + (w % 2) * (cell_w + 16)
@@ -214,13 +213,13 @@ class InfoPanel(OverlayWindow):
             advice = self.advisor.advise(tyre, w)
             if advice is not None:
                 off = advice.adjust
-                color = THROTTLE if abs(off) <= PRESSURE_OK_PSI else CLUTCH if off > 0 else BRAKE
-                hot = f"HOT {advice.hot_psi:.1f}"
-                garage = f"SET {advice.garage_psi:.1f}  {signed(off, 1)}"
-            else:  # windows for this compound not learned yet: show the game's live verdict
+                color = THROTTLE if abs(off) < 0.05 else CLUTCH if off > 0 else BRAKE
+                hot = f"@{advice.ref_c:.0f}° {advice.hot_psi:.1f}"
+                garage = f"SET {advice.garage_psi:.1f}  " + ("OK" if abs(off) < 0.05 else signed(off, 1))
+            else:  # no window data for this compound yet: show the game's live verdict
                 verdict = live_verdict(tyre)
                 color = {"OK": THROTTLE, "LOW": CLUTCH, "HIGH": BRAKE}.get(verdict, TEXT)
-                hot, garage = (verdict or ""), "learning window…"
+                hot, garage = (verdict or ""), "no window data yet"
             p.setPen(Qt.NoPen)
             p.setBrush(TRACK)
             p.drawRoundedRect(QRectF(x, cy, cell_w, cell_h), 4, 4)
