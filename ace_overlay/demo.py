@@ -3,7 +3,7 @@
 import math
 import time
 
-from .shm import Graphics, Physics
+from .shm import STATUS_LIVE, Graphics, Physics
 from .tyres import GARAGE_C, PSI_PER_C
 
 MAX_RPM = 8000
@@ -15,6 +15,7 @@ V_EXIT, V_TOP, V_APEX = 120.0, 225.0, 90.0  # km/h at lap start, end of straight
 DEMO_LAP_MS = 92_000  # the info panel reports each 10 s demo lap as a 1:32 lap
 DEMO_COLD_PSI = (26.0, 26.2, 24.6, 29.4)  # FL, FR, RL, RR garage pressures: fronts right, rears one low / one high
 DEMO_WINDOW_PSI = (27.0, 31.0)  # ideal pressure window; normalised = 1.0 inside, ±1/3 per psi outside
+DEMO_MAX_BOOST, DEMO_VACUUM = 1.4, -0.3  # bar
 DEMO_WINDOW_C = (60.0, 95.0)  # ideal temperature window (surface ±1/30 per °C, core ±1/20 per °C outside)
 
 
@@ -47,6 +48,7 @@ class DemoSource:
         # They start at the 40 °C garage temperature, like leaving the pits on fresh tyres.
         self._temps = [[40.0, 40.0, 40.0] for _ in range(4)]
         self._bulk = [40.0] * 4
+        self._boost = 0.0  # bar
         self.graphics = None  # Graphics snapshot from the last read(), like LiveSource
 
     def read(self):
@@ -75,6 +77,13 @@ class DemoSource:
         rpm = max(1500, min(MAX_RPM, self._speed / GEAR_TOP[self._gear] * MAX_RPM))
 
         self._update_tyres(dt, gas, brake, corner)
+
+        # Turbo: spools towards a throttle- and rpm-dependent target, dumps on shifts, vacuum off throttle.
+        target = DEMO_MAX_BOOST * gas * min(1.0, rpm / 5500) if gas > 0.05 else DEMO_VACUUM
+        if now < self._shift_until:
+            target = min(target, 0.2)
+        rate = 2.5 if target > self._boost else 6.0
+        self._boost += (target - self._boost) * min(1.0, rate * dt)
 
         self._packet += 1
         p = Physics()
@@ -106,6 +115,8 @@ class DemoSource:
     def _graphics(self, now, t):
         """Info-panel data. The 10 s demo lap is reported as a 1:32 lap, ticking at that pace."""
         g = Graphics()
+        g.status = STATUS_LIVE  # out on track, so "only while driving" shows the HUD
+        g.max_turbo_boost, g.turbo_boost = DEMO_MAX_BOOST, self._boost
         elapsed = now - self._start
         lap_index = int(elapsed // 10)
         g.npos = t / 10

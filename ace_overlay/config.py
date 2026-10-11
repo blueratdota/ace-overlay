@@ -24,6 +24,7 @@ class Config:
     color3: str = "#ff4d4d"
     flash_color: str = "#4d7cff"
     show_panel: bool = True  # the separate info panel (timing, fuel, pressures, car settings)
+    hide_until_driving: bool = False  # HUD only appears once the car is out of the garage
 
     @classmethod
     def load(cls, settings):
@@ -94,9 +95,12 @@ class SettingsDialog(QDialog):
         rpm_form.addRow("Colour 3 from", self.row(self.rpm_zone3, self.color3))
         rpm_form.addRow("Flash at", self.row(self.rpm_flash, self.flash_color))
 
+        self.hide_until_driving = QCheckBox("Only show the HUD while driving (hidden in menus, the garage, replays and pause)")
         self.show_panel = QCheckBox("Show the info panel (timing, fuel, tyre pressures, car settings)")
-        panel_box = QGroupBox("Info panel")
-        QVBoxLayout(panel_box).addWidget(self.show_panel)
+        panel_box = QGroupBox("Windows")
+        windows_layout = QVBoxLayout(panel_box)
+        windows_layout.addWidget(self.hide_until_driving)
+        windows_layout.addWidget(self.show_panel)
 
         buttons = QDialogButtonBox(QDialogButtonBox.RestoreDefaults | QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
@@ -114,6 +118,7 @@ class SettingsDialog(QDialog):
         for button in (self.color1, self.color2, self.color3, self.flash_color):
             button.changed.connect(self.apply)
         self.show_panel.toggled.connect(self.apply)
+        self.hide_until_driving.toggled.connect(self.apply)
 
     @staticmethod
     def row(spin, color_button):
@@ -133,6 +138,7 @@ class SettingsDialog(QDialog):
         for name in ("color1", "color2", "color3", "flash_color"):
             getattr(self, name).set_color(getattr(c, name))
         self.show_panel.setChecked(c.show_panel)
+        self.hide_until_driving.setChecked(c.hide_until_driving)
         self.rpm_flash.setMinimum(c.rpm_start + 1)
         self._loading = False
 
@@ -148,6 +154,7 @@ class SettingsDialog(QDialog):
         for name in ("color1", "color2", "color3", "flash_color"):
             setattr(c, name, getattr(self, name).color)
         c.show_panel = self.show_panel.isChecked()
+        c.hide_until_driving = self.hide_until_driving.isChecked()
         c.save(self.overlay.settings)
         self.overlay.config_changed.emit()
 

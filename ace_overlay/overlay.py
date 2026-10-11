@@ -9,12 +9,14 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 from .config import TRACE_MAX_SECONDS, Config, SettingsDialog
+from .shm import is_driving
 
 THROTTLE = QColor("#3ddc84")
 BRAKE = QColor("#ff4d4d")
 CLUTCH = QColor("#4da3ff")
 YELLOW = QColor("#ffd23f")
 ORANGE = QColor("#ff8c3f")
+BOOST = QColor("#b07cff")
 BG = QColor(12, 12, 16, 180)
 TRACK = QColor(255, 255, 255, 28)
 TEXT = QColor("#f2f2f2")
@@ -33,6 +35,8 @@ TRACE_X = PEDAL_X + 3 * PEDAL_W + 2 * PEDAL_GAP + PAD
 TRACE_W = 240  # the time window it shows is Config.trace_seconds
 DASH_X = TRACE_X + TRACE_W + PAD
 DASH_W = 138
+BOOST_H = 14  # turbo boost row along the bottom of the dash column
+BOOST_Y = CT + CH - BOOST_H
 TYRE_X = DASH_X + DASH_W + PAD
 TYRE_W = 120
 AID_RIGHT_X = TYRE_X + TYRE_W + PAD
@@ -41,6 +45,8 @@ W = AID_RIGHT_X + AID_W + PAD
 SHIFT_LEDS = 15  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
 SIDE_SLIP_SHARE = 0.7  # a side lights if its wheel slip is at least this share of the worst side
+HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stops, to avoid flicker
+BAR_TO_PSI = 14.5038
 
 # Tyre surface temperature (°C) -> colour. Generic racing-slick window; tune per compound.
 TYRE_STOPS = [(50, QColor("#3b6cff")), (75, THROTTLE), (95, THROTTLE), (105, YELLOW), (115, BRAKE)]
@@ -248,7 +254,8 @@ class InputsOverlay(OverlayWindow):
         self.config = Config.load(settings)
         self.config_changed.connect(self.update)
         self.settings_dialog = None
-        self.frame = None
+        self.frame = self.graphics = None
+        self.last_driving = float("-inf")  # last time is_driving() was true
         self.trace = deque()  # (time, gas, brake, clutch) for every tick
         self.blink = 0
         # (aid, side) -> time the light stops flashing; side 0 = left, 1 = right
@@ -272,8 +279,12 @@ class InputsOverlay(OverlayWindow):
 
     def tick(self):
         f = self.frame = self.source.read()
+        self.graphics = self.source.graphics
+        now = time.monotonic()
+        if is_driving(self.graphics):
+            self.last_driving = now
+        self.update_visibility(now)
         if f is not None:
-            now = time.monotonic()
             # Keep every reading for the longest window the settings allow.
             self.trace.append((now, f.gas, f.brake, f.clutch))
             while self.trace[0][0] < now - TRACE_MAX_SECONDS:
@@ -285,6 +296,14 @@ class InputsOverlay(OverlayWindow):
                             self.aid_until[aid, side] = now + AID_HOLD_S
         self.blink = (self.blink + 1) % 16
         self.update()
+
+    def update_visibility(self, now):
+        """With "only while driving" on, the HUD hides in menus, the garage, replays and pause. A short
+        delay stops it flickering on transitions, and it always shows while unpinned for positioning."""
+        want = (not self.config.hide_until_driving or not self.locked
+                or now - self.last_driving < HIDE_DELAY_S)
+        if want != self.isVisible():
+            self.setVisible(want)
 
     # --- drawing ---------------------------------------------------------
 
@@ -304,6 +323,7 @@ class InputsOverlay(OverlayWindow):
         self.draw_pedals(p, f)
         self.draw_trace(p)
         self.draw_gear_speed(p, f)
+        self.draw_boost(p)
         self.draw_aids(p)
         self.draw_tyres(p, f)
 
@@ -377,20 +397,48 @@ class InputsOverlay(OverlayWindow):
         gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
         p.setPen(TEXT)
         p.setFont(QFont("Segoe UI", 46, QFont.Bold))
-        p.drawText(QRectF(DASH_X, CT, 62, CH), Qt.AlignCenter, gear)
+        p.drawText(QRectF(DASH_X, CT - 2, 62, BOOST_Y - CT), Qt.AlignCenter, gear)
 
         right_x, right_w = DASH_X + 64, DASH_W - 64
         p.setFont(QFont("Consolas", 22, QFont.Bold))
-        p.drawText(QRectF(right_x, CT + 6, right_w, 32), Qt.AlignRight | Qt.AlignVCenter, f"{f.speedKmh:.0f}")
+        p.drawText(QRectF(right_x, CT, right_w, 30), Qt.AlignRight | Qt.AlignVCenter, f"{f.speedKmh:.0f}")
         p.setPen(DIM)
         p.setFont(QFont("Segoe UI", 8))
-        p.drawText(QRectF(right_x, CT + 36, right_w, 14), Qt.AlignRight, "km/h")
+        p.drawText(QRectF(right_x, CT + 28, right_w, 14), Qt.AlignRight, "km/h")
 
         p.setFont(QFont("Segoe UI", 7, QFont.Bold))
-        p.drawText(QRectF(right_x, CT + 60, right_w, 12), Qt.AlignRight, "RPM")
+        p.drawText(QRectF(right_x, CT + 44, right_w, 12), Qt.AlignRight, "RPM")
         p.setPen(TEXT)
         p.setFont(QFont("Consolas", 13, QFont.Bold))
-        p.drawText(QRectF(right_x, CT + 72, right_w, 20), Qt.AlignRight | Qt.AlignVCenter, f"{f.rpms}")
+        p.drawText(QRectF(right_x, CT + 54, right_w, 20), Qt.AlignRight | Qt.AlignVCenter, f"{f.rpms}")
+
+    def draw_boost(self, p):
+        """Turbo boost under the gear / RPM. Fill is boost relative to the car's maximum; the number
+        is in psi and can go negative (vacuum) off throttle. Dim on naturally aspirated cars."""
+        g = self.graphics
+        has_turbo = g is not None and g.max_turbo_boost > 0
+        row = QRectF(DASH_X, BOOST_Y, DASH_W, BOOST_H)
+        label_w, value_w = 38, 34
+        p.setPen(DIM)
+        p.setFont(QFont("Segoe UI", 7, QFont.Bold))
+        p.drawText(QRectF(row.x(), row.y(), label_w, row.height()), Qt.AlignLeft | Qt.AlignVCenter, "BOOST")
+
+        bar = QRectF(row.x() + label_w, row.y() + (row.height() - 6) / 2, row.width() - label_w - value_w - 4, 6)
+        p.setPen(Qt.NoPen)
+        p.setBrush(TRACK)
+        p.drawRoundedRect(bar, 3, 3)
+        value = QRectF(row.right() - value_w, row.y(), value_w, row.height())
+        p.setFont(QFont("Consolas", 9, QFont.Bold))
+        if not has_turbo:
+            p.setPen(DIM)
+            p.drawText(value, Qt.AlignRight | Qt.AlignVCenter, "–")
+            return
+        frac = max(0.0, min(1.0, g.turbo_boost / g.max_turbo_boost))
+        p.setBrush(BOOST)
+        p.drawRoundedRect(QRectF(bar.x(), bar.y(), bar.width() * frac, bar.height()), 3, 3)
+        psi = g.turbo_boost * BAR_TO_PSI
+        p.setPen(TEXT)
+        p.drawText(value, Qt.AlignRight | Qt.AlignVCenter, f"{psi:.1f}" if psi >= -0.05 else f"−{-psi:.1f}")
 
     def draw_aids(self, p):
         """TC above ABS on each side of the overlay; a side flashes while that side is intervening."""

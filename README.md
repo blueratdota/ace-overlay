@@ -27,6 +27,8 @@
   your live input, and the time window (2–30 s) can be changed on the fly.
 - **Shift lights.** A full-width, 15-light RPM strip with configurable colour zones and flash point.
 - **Gear, speed and RPM** at a glance.
+- **Turbo boost.** A boost bar under the RPM, filled relative to the car's maximum boost, with the
+  pressure in psi (negative off throttle). It's dimmed on naturally aspirated cars.
 - **Tyre temperatures.** Each tyre shows inner, middle and outer surface temperatures as colour
   bands, with the average beside it, laid out like the car seen from above.
 - **Side-aware TC and ABS lights.** Flashing lights on both sides of the HUD. The side that lights
@@ -142,6 +144,7 @@ The pin and gear fade out while you drive and light up when you hover over them.
 | Colour 2 from / Colour 3 from | 86 % / 92 % | Where each light switches colour. Every light takes the colour of the RPM % it represents. |
 | Flash at | 97 % | RPM where the whole strip flashes. |
 | Colours | green / yellow / red / blue | One swatch per zone plus the flash colour. |
+| Only show the HUD while driving | off | Hides the HUD in menus, the garage or pit box, replays and pause, and shows it once you leave the pit box (the pit lane counts as driving). The info panel isn't affected. While the HUD is hidden, use the tray icon for *Move overlays* (which shows it for positioning) and *Settings…*. |
 | Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
 
 ### Reading the tyres

@@ -1,7 +1,9 @@
 import ctypes
 import unittest
 
-from ace_overlay.shm import Electronics, Graphics, Physics, SessionState, TyreState
+from types import SimpleNamespace
+
+from ace_overlay.shm import STATUS_LIVE, Electronics, Graphics, Physics, SessionState, TyreState, is_driving
 
 
 class PhysicsLayoutTest(unittest.TestCase):
@@ -41,6 +43,7 @@ class GraphicsLayoutTest(unittest.TestCase):
             "total_lap_count": 2384, "current_pos": 2388, "last_laptime_ms": 2396, "best_laptime_ms": 2400,
             "session_state": 2476, "car_model": 3086, "is_in_pit_lane": 3120, "is_valid_lap": 3121,
             "gap_ahead": 3844, "gap_behind": 3848, "fuel_per_lap": 3856, "max_fuel": 3928, "car_ids": 3940,
+            "status": 4, "turbo_boost": 144, "max_turbo_boost": 3932, "is_in_pit_box": 3119,
         }
         for name, offset in expected.items():
             with self.subTest(field=name):
@@ -48,6 +51,15 @@ class GraphicsLayoutTest(unittest.TestCase):
         self.assertEqual(Electronics.brake_bias.offset, 8)
         self.assertEqual(SessionState.time_left_ms.offset, 48)
         self.assertEqual(SessionState.total_lap.offset, 68)
+
+
+class DrivingTest(unittest.TestCase):
+    def test_out_of_the_box_in_a_live_session(self):
+        live = STATUS_LIVE
+        self.assertTrue(is_driving(SimpleNamespace(status=live, is_in_pit_box=False)))
+        self.assertFalse(is_driving(SimpleNamespace(status=live, is_in_pit_box=True)))
+        self.assertFalse(is_driving(SimpleNamespace(status=live + 1, is_in_pit_box=False)))
+        self.assertFalse(is_driving(None))
 
 
 if __name__ == "__main__":

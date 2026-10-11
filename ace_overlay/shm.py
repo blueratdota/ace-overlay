@@ -15,6 +15,7 @@ from ctypes import wintypes
 
 PHYSICS_TAG = "Local\\acevo_pmf_physics"
 GRAPHICS_TAG = "Local\\acevo_pmf_graphics"
+STATUS_LIVE = 2  # graphics.status while in a session: both in the pit box and on track (verified live)
 
 _f = ctypes.c_float
 _i = ctypes.c_int32
@@ -381,6 +382,11 @@ class SharedBlock:
         out = self.struct()
         ctypes.memmove(ctypes.addressof(out), self._view, ctypes.sizeof(out))
         return out
+
+
+def is_driving(graphics):
+    """True once the car is out of the garage / pit box in a live session (pit lane counts)."""
+    return graphics is not None and graphics.status == STATUS_LIVE and not graphics.is_in_pit_box
 
 
 class LiveSource:
