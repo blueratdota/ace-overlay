@@ -39,8 +39,9 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   middle of its ideal temperature window, and recommends the garage pressure. Never judge pressure
   without its temperature.
 - **"Driving" = `graphics.status == STATUS_LIVE (2)` and not `is_in_pit_box`** (`shm.is_driving`).
-  Status is 2 both in the box and on track. The HUD's "only while driving" setting uses this with a
-  2 s hide delay, and always shows while unpinned.
+  Status is 2 both in the box and on track, and **3 in a replay** (the graphics packetId also stops
+  advancing then). The HUD's "only while driving" setting uses this with a 2 s hide delay, and always
+  shows while unpinned. The setting is off by default.
 - **Turbo:** `graphics.turbo_boost` (bar, relative) and `max_turbo_boost` (0.66 on the Golf 8 R,
   0 = naturally aspirated). Boost reads 0 when revving stationary (no load).
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
