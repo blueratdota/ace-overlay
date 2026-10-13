@@ -38,8 +38,9 @@ CX0 = RING_CX + RING_R + 16  # start of the middle section
 DOT_Y, DOT_D = 9, 8  # shift-light row centre (close to the top edge) and dot diameter
 TRACE_X, TRACE_Y, TRACE_W = CX0, 20, 360  # the time window is Config.trace_seconds
 TRACE_H = PH - CHIP_OVERLAP - 4 - TRACE_Y  # down to just above the chip
-POS_X, POS_W = TRACE_X + TRACE_W + 8, 44
-W = POS_X + POS_W + R - 28  # the position sits partly inside the right end's curve
+RIGHT_CX = TRACE_X + TRACE_W + 4  # right end's centre: its arcs start right next to the trace
+W = RIGHT_CX + R
+POS_X, POS_W = RIGHT_CX + 3, 34  # the position fits inside the right end's half circle
 CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
 
 SHIFT_LEDS = 26  # thresholds and colours come from Config
@@ -431,12 +432,12 @@ class InputsOverlay(OverlayWindow):
         g = self.graphics
         pos = g.current_pos if g is not None else 0
         p.setPen(ORANGE if pos else DIM)
-        p.setFont(font(17, QFont.Bold))
-        p.drawText(QRectF(POS_X, R - 22, POS_W, 28), Qt.AlignCenter, f"P{pos}" if pos else "P–")
+        p.setFont(font(13, QFont.Bold))
+        p.drawText(QRectF(POS_X, R - 17, POS_W, 22), Qt.AlignCenter, f"P{pos}" if pos else "P–")
         if pos and g.total_drivers:
             p.setPen(DIM)
-            p.setFont(font(7))
-            p.drawText(QRectF(POS_X, R + 5, POS_W, 12), Qt.AlignCenter, f"OF {g.total_drivers}")
+            p.setFont(font(6.5))
+            p.drawText(QRectF(POS_X, R + 4, POS_W, 11), Qt.AlignCenter, f"OF {g.total_drivers}")
 
     def draw_chip(self, p, f):
         """Track temperature · air temperature · current lap, in a chip hanging below the pill."""
