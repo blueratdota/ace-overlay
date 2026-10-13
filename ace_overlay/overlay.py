@@ -24,23 +24,26 @@ DOT_OFF = QColor(255, 255, 255, 60)
 TEXT = QColor("#f2f2f2")
 DIM = QColor(255, 255, 255, 110)
 
-# The pill: half-circle ends (TC left, ABS right), then left to right inside it:
-# gear ring | dot shift lights over KPH/RPM and the trace | position. The chip hangs off the bottom edge.
+# The pill. Its rounded ends carry the TC / ABS arcs (left end = car's left wheels, right end = right
+# wheels; upper quarter TC, lower quarter ABS). The gear ring sits inside the left end; then the dot
+# shift lights over KPH/RPM and the trace, then the position. The chip hangs off the bottom edge.
 PH = 112  # pill height
 R = PH // 2  # end radius
 CHIP_H = 26
 H = PH + CHIP_H // 2 + 2
-RING_CX, RING_CY, RING_R, RING_W = R + 52, R, 42, 7  # gear ring centre, radius (to stroke centre), stroke
+ARC_R, ARC_W = R - 5, 3.5  # TC / ABS end arcs: radius (to stroke centre) and stroke
+RING_CX, RING_CY, RING_R, RING_W = R, R, 42, 7  # gear ring, concentric with the left end
 CX0 = RING_CX + RING_R + 18  # start of the middle section
 DOT_Y, DOT_D = 20, 9  # shift-light row centre and dot diameter
 READ_W = 128  # KPH / RPM block
 TRACE_X, TRACE_Y, TRACE_W, TRACE_H = CX0 + READ_W + 12, 36, 220, 52  # the time window is Config.trace_seconds
 POS_X, POS_W = TRACE_X + TRACE_W + 12, 80
-W = POS_X + POS_W + 4 + R
+W = POS_X + POS_W + R - 20  # the position runs a little way into the right end's curve
 CHIP_CX = (CX0 + TRACE_X + TRACE_W) / 2  # chip centred under KPH/RPM + trace
 
 SHIFT_LEDS = 15  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
+SIDE_SLIP_SHARE = 0.7  # a side lights if its wheel slip is at least this share of the worst side
 HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stops, to avoid flicker
 
 BASE_FLAGS = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
@@ -53,6 +56,21 @@ def font(size, weight=QFont.DemiBold):
     f.setPointSizeF(size)
     f.setWeight(weight)
     return f
+
+
+def slipping_sides(slip_ratio):
+    """(left, right) - which side(s) of the car a TC/ABS intervention is working on.
+
+    The game only reports TC/ABS as a single flag, so the side is taken from per-wheel slip:
+    a side lights if its worst wheel slips at least SIDE_SLIP_SHARE as much as the worst
+    wheel overall. With no slip data, both sides light.
+    """
+    left = max(abs(slip_ratio[0]), abs(slip_ratio[2]))  # FL, RL
+    right = max(abs(slip_ratio[1]), abs(slip_ratio[3]))  # FR, RR
+    worst = max(left, right)
+    if worst < 1e-3:
+        return True, True
+    return left >= worst * SIDE_SLIP_SHARE, right >= worst * SIDE_SLIP_SHARE
 
 
 def lap_time(ms):
@@ -240,7 +258,9 @@ class InputsOverlay(OverlayWindow):
         self.frame = self.graphics = None
         self.last_driving = float("-inf")  # last time is_driving() was true
         self.trace = deque()  # (time, gas, brake, clutch, tc_working, abs_working) for every tick
-        self.aid_until = {"tc": 0.0, "abs": 0.0}  # time each light stops flashing
+        self.aid_trace_until = {"tc": 0.0, "abs": 0.0}  # car-wide, for the trace colouring
+        # (aid, side) -> time that end arc stops flashing; side 0 = left, 1 = right
+        self.aid_until = {(aid, side): 0.0 for aid in ("tc", "abs") for side in (0, 1)}
         self.blink = 0
 
         self.timer = QTimer(self)
@@ -269,10 +289,14 @@ class InputsOverlay(OverlayWindow):
         if f is not None:
             for aid, active in (("tc", f.tcInAction), ("abs", f.absInAction)):
                 if active:
-                    self.aid_until[aid] = now + AID_HOLD_S
+                    self.aid_trace_until[aid] = now + AID_HOLD_S
+                    for side, lit in enumerate(slipping_sides(f.slipRatio)):
+                        if lit:
+                            self.aid_until[aid, side] = now + AID_HOLD_S
             # Keep every reading for the longest window the settings allow, with whether TC / ABS were
             # working (held like the lights, so a flickering flag gives a solid stretch of colour).
-            self.trace.append((now, f.gas, f.brake, f.clutch, now < self.aid_until["tc"], now < self.aid_until["abs"]))
+            self.trace.append((now, f.gas, f.brake, f.clutch,
+                               now < self.aid_trace_until["tc"], now < self.aid_trace_until["abs"]))
             while self.trace[0][0] < now - TRACE_MAX_SECONDS:
                 self.trace.popleft()
         self.blink = (self.blink + 1) % 16
@@ -300,7 +324,7 @@ class InputsOverlay(OverlayWindow):
             p.drawText(QRectF(0, 0, W, PH), Qt.AlignCenter, "Waiting for Assetto Corsa EVO…")
             return
 
-        self.draw_caps(p)
+        self.draw_end_arcs(p)
         self.draw_ring(p, f)
         self.draw_dots(p, f)
         self.draw_readouts(p, f)
@@ -308,26 +332,19 @@ class InputsOverlay(OverlayWindow):
         self.draw_position(p)
         self.draw_chip(p, f)
 
-    def draw_caps(self, p):
-        """The pill's half-circle ends are the TC (left) and ABS (right) lights."""
+    def draw_end_arcs(self, p):
+        """TC / ABS as lines along the pill's rounded ends: the left end for the car's left wheels, the
+        right end for its right wheels; upper quarter TC (yellow), lower quarter ABS (orange)."""
         now = time.monotonic()
         flash_on = (self.blink // 4) % 2 == 0  # ~7.5 Hz at 60 fps
-        inset = 4
-        disc = QRectF(inset, inset, PH - 2 * inset, PH - 2 * inset)
-        for aid, label, color, x0, start in (("tc", "TC", YELLOW, 0, 90), ("abs", "ABS", ORANGE, W - PH, 270)):
-            on = now < self.aid_until[aid] and flash_on
-            half = QPainterPath()
-            half.moveTo(x0 + R, R)
-            half.arcTo(disc.translated(x0, 0), start, 180)
-            half.closeSubpath()
-            p.setPen(Qt.NoPen)
-            p.setBrush(color if on else TRACK)
-            p.drawPath(half)
-            # Label centred in the half that's inside the pill.
-            text_x = x0 + inset if aid == "tc" else x0 + R
-            p.setPen(QColor("#111") if on else DIM)
-            p.setFont(font(9, QFont.Bold))
-            p.drawText(QRectF(text_x, 0, R - inset, PH), Qt.AlignCenter, label)
+        gap = 6  # degrees between the TC and ABS quarter on each end
+        # (side, end centre x, TC quarter start, ABS quarter start); Qt angles go CCW from 3 o'clock.
+        for side, cx, tc_start, abs_start in ((0, R, 90, 180), (1, W - R, 0, 270)):
+            box = QRectF(cx - ARC_R, R - ARC_R, 2 * ARC_R, 2 * ARC_R)
+            for aid, start, color in (("tc", tc_start, YELLOW), ("abs", abs_start, ORANGE)):
+                on = now < self.aid_until[aid, side] and flash_on
+                p.setPen(QPen(color if on else TRACK, ARC_W + (1.5 if on else 0), Qt.SolidLine, Qt.FlatCap))
+                p.drawArc(box, int((start + gap / 2) * 16), int((90 - gap) * 16))
 
     def draw_ring(self, p, f):
         """Gear in a ring: throttle fills 3/4 of it clockwise over the top (green), brake fills the

@@ -151,7 +151,8 @@ def main():
     run_until(lambda f: f.rpms >= 0.97 * f.currentMaxRpm)
     still("shift-lights.png")
 
-    run_until(lambda f: f.brake > 0.7 and clock.t < overlay.aid_until["abs"])
+    # Wait until only the left ABS arc is lit (the right side's hold from straight-line braking has expired).
+    run_until(lambda f: overlay.aid_until["abs", 0] > clock.t >= overlay.aid_until["abs", 1])
     still("abs-braking.png")
 
     run_until(lambda f: f.tcInAction and 8.2 < lap_time() < 8.6)

@@ -51,8 +51,8 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
   It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.
-- **TC/ABS are car-wide flags only.** Per-wheel `slipRatio` is populated during ABS, if side info is
-  ever wanted again; graphics `TyreState.lock` never fired. The pill HUD has one TC and one ABS light.
+- **TC/ABS side is inferred.** The game only sends car-wide flags, so `slipping_sides()` picks the
+  side from per-wheel `slipRatio` (populated during ABS on the Golf; graphics `TyreState.lock` never fired).
 - **Physics `airTemp`/`roadTemp` read 0 in some states** (seen with status 3). Use `shm.air_temp()`
   (falls back to graphics `air_temperature_c`) and `shm.track_temp()` (None → "–").
 - For live investigation, attach to both blocks while the user drives and count how often each
@@ -66,9 +66,10 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - The locked overlay is click-through (`WindowTransparentForInput`), so **any clickable control must
   be its own window**. See `SideButton` (pin, gear). Those use `WindowDoesNotAcceptFocus` so clicking
   them doesn't take focus from the game.
-- The HUD is a pill: half-circle ends are the TC (left) and ABS (right) lights, then the gear ring
-  (throttle on 3/4, brake on the bottom 1/4), dot shift lights over KPH/RPM and the trace, then the
-  position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
+- The HUD is a pill. Its rounded ends are thin TC/ABS arc lines (upper quarter TC, lower quarter
+  ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). The gear ring
+  (throttle on 3/4, brake on the bottom 1/4) is concentric with the left end, then come the dot shift
+  lights over KPH/RPM and the trace, then the position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
   constant-driven at the top of `overlay.py` (`PH`, `R`, `RING_*`, `CX0`, `TRACE_*`, `POS_*`, `W`):
   extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
 - Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the

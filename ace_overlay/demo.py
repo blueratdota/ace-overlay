@@ -89,6 +89,14 @@ class DemoSource:
         # ABS chatters under heavy braking; TC cuts in on the corner exit.
         p.absInAction = int(brake > 0.55 and int(now * 20) % 3 != 0)
         p.tcInAction = int(7.9 < t < 8.9 and int(now * 14) % 2 == 0)
+        # Per-wheel slip: braking locks the unloaded inside (left) wheels more as the car turns in;
+        # on the exit the inside rear spins up.
+        lock = brake * 0.12
+        spin = gas * 0.18 if 7.9 < t < 8.9 else 0.0
+        p.slipRatio[0] = -lock * (1 + 2 * corner)  # FL
+        p.slipRatio[1] = -lock  # FR
+        p.slipRatio[2] = -lock * 0.6 * (1 + 2 * corner) + spin  # RL
+        p.slipRatio[3] = -lock * 0.6 + spin * 0.3  # RR
         for w in range(4):
             p.tyreTempI[w], p.tyreTempM[w], p.tyreTempO[w] = self._temps[w]
         p.airTemp, p.roadTemp = 24.0, 33.0

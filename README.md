@@ -23,16 +23,17 @@
 
 ## Features
 
-- **Gear and pedal ring.** The gear sits inside a ring: throttle fills three quarters of it in green,
-  and brake fills the bottom quarter in red.
+- **Gear and pedal ring.** The gear sits inside a ring at the left end of the pill: throttle fills
+  three quarters of it in green, and brake fills the bottom quarter in red.
 - **Shift lights.** A row of 15 dots with configurable colour zones and flash point.
 - **Speed, RPM and position** at a glance. Position shows as "P19" (with "of 20" underneath)
   whenever the game ranks the session.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always
   your live input, and the time window (2–30 s) can be changed on the fly. The brake line turns orange
   while ABS works, and the throttle line yellow while TC cuts.
-- **TC and ABS lights.** The pill's two rounded ends: the left end flashes yellow when traction
-  control cuts in, and the right end flashes orange when ABS works.
+- **Side-aware TC and ABS lines.** The pill's rounded ends are thin arc lines: the upper quarter of
+  each end is TC (flashes yellow) and the lower quarter ABS (flashes orange). The left end is the car's
+  left wheels and the right end its right wheels, so you can see which side is slipping.
 - **Track, air and lap time.** A chip under the dash with track temperature, air temperature and the
   running time of your current lap.
 - **Info panel.** A second, separately placed window for race-engineer data: live delta to your best
@@ -66,12 +67,12 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/abs-braking.png" alt="ABS end lit while braking">
-      <p align="center"><sub><b>Heavy braking.</b> The ring's red quarter shows the brake, and the right end lights orange while ABS works.</sub></p>
+      <img src="docs/images/abs-braking.png" alt="Left ABS arc lit while trail braking">
+      <p align="center"><sub><b>Trail braking into a left-hander.</b> The ring's red quarter shows the brake, and only the left ABS arc lights, where the unloaded inside wheels lock first.</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/images/tc-exit.png" alt="TC end lit on corner exit">
-      <p align="center"><sub><b>Corner exit.</b> The left end lights yellow while TC cuts, and the throttle line in the trace turns yellow.</sub></p>
+      <img src="docs/images/tc-exit.png" alt="Left TC arc lit on corner exit">
+      <p align="center"><sub><b>Corner exit.</b> The upper-left TC arc lights as the inside rear spins, and the throttle line in the trace turns yellow.</sub></p>
     </td>
   </tr>
   <tr>
@@ -166,6 +167,9 @@ AC EVO ──────┤                                                    
 
 - **Tyre wear isn't shown.** AC EVO doesn't publish it. The in-game HUD calculates it internally
   and never writes it to shared memory.
+- **The TC/ABS side is inferred.** The game reports TC and ABS as single on/off flags. The overlay
+  picks the side from per-wheel slip, and lights both sides when they're close or when no slip data
+  is available.
 - **Early access.** AC EVO is still in development and Kunos can change the telemetry layout
   between patches. If values look wrong after an update, run **`Check telemetry.bat`** (or
   `python -m ace_overlay --dump`) while driving and compare against the in-game HUD, then
