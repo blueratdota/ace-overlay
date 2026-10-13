@@ -23,12 +23,13 @@
 
 ## Features
 
-- **Gear and pedal ring.** A ring at the left end of the pill, with the gear and speed inside it.
+- **Gear and pedal ring.** A ring at the right end of the pill, with the gear and speed inside it.
   Throttle fills three quarters of it in green, clockwise from the top-left, and brake fills the left
   quarter in red.
 - **Shift lights.** A row of 26 dots along the top edge, with configurable colour zones and flash point. They're also
   the RPM readout.
-- **Position.** Shows as "P19" (with "of 20" underneath) whenever the game ranks the session.
+- **Position.** In the left end of the pill: "P19" (with "of 20" underneath) whenever the game
+  ranks the session.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always
   your live input, and the time window (2–30 s) can be changed on the fly. The brake line turns orange
   while ABS works, and the throttle line yellow while TC cuts.

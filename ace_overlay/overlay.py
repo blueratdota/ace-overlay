@@ -25,22 +25,21 @@ TEXT = QColor("#f2f2f2")
 DIM = QColor(255, 255, 255, 110)
 
 # The pill. Its rounded ends carry the TC / ABS arcs (left end = car's left wheels, right end = right
-# wheels; upper quarter TC, lower quarter ABS). The gear ring (with the speed) sits inside the left end;
-# then the dot shift lights along the top edge over the trace, then the position. The chip hangs below
-# the bottom edge.
+# wheels; upper quarter TC, lower quarter ABS). The position sits inside the left end; then the dot shift
+# lights along the top edge over the trace; then the gear ring (with the speed) inside the right end.
+# The chip hangs below the bottom edge.
 PH = 100  # pill height
 R = PH // 2  # end radius
 CHIP_H, CHIP_OVERLAP = 24, 6  # the chip only tucks this far up into the pill
 H = PH + CHIP_H - CHIP_OVERLAP + 1
 ARC_R, ARC_W = R - 5, 3.5  # TC / ABS end arcs: radius (to stroke centre) and stroke
-RING_CX, RING_CY, RING_R, RING_W = R, R, 37, 6  # gear ring, concentric with the left end
-CX0 = RING_CX + RING_R + 16  # start of the middle section
+POS_X, POS_W = R - 37, 34  # the position fits inside the left end's half circle
 DOT_Y, DOT_D = 9, 8  # shift-light row centre (close to the top edge) and dot diameter
-TRACE_X, TRACE_Y, TRACE_W = CX0, 20, 360  # the time window is Config.trace_seconds
+TRACE_X, TRACE_Y, TRACE_W = R + 4, 20, 360  # starts right next to the left end; window is Config.trace_seconds
 TRACE_H = PH - CHIP_OVERLAP - 4 - TRACE_Y  # down to just above the chip
-RIGHT_CX = TRACE_X + TRACE_W + 4  # right end's centre: its arcs start right next to the trace
-W = RIGHT_CX + R
-POS_X, POS_W = RIGHT_CX + 3, 34  # the position fits inside the right end's half circle
+RING_R, RING_W = 37, 6
+RING_CX, RING_CY = TRACE_X + TRACE_W + 16 + RING_R, R  # gear ring, concentric with the right end
+W = RING_CX + R
 CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
 
 SHIFT_LEDS = 26  # thresholds and colours come from Config
@@ -51,12 +50,15 @@ HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stop
 BASE_FLAGS = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
 
 
-def font(size, weight=QFont.DemiBold):
-    """Bahnschrift (built into Windows 10+) for the dash look, falling back to Segoe UI."""
+def font(size, weight=QFont.DemiBold, tabular=False):
+    """Bahnschrift (built into Windows 10+) for the dash look, falling back to Segoe UI. `tabular`
+    gives every digit the same width, so ticking numbers don't make the text jitter."""
     f = QFont()
     f.setFamilies(["Bahnschrift", "Segoe UI"])
     f.setPointSizeF(size)
     f.setWeight(weight)
+    if tabular:
+        f.setFeature(QFont.Tag.fromString("tnum"), 1)
     return f
 
 
@@ -378,7 +380,7 @@ class InputsOverlay(OverlayWindow):
         c = self.config
         pct = 100 * f.rpms / f.currentMaxRpm if f.currentMaxRpm > 0 else 0.0
         flash = pct >= c.rpm_flash
-        x0, x1 = CX0 + DOT_D / 2, TRACE_X + TRACE_W - DOT_D / 2
+        x0, x1 = TRACE_X + DOT_D / 2, TRACE_X + TRACE_W - DOT_D / 2
         step = (x1 - x0) / (SHIFT_LEDS - 1)
         p.setPen(Qt.NoPen)
         for i in range(SHIFT_LEDS):
@@ -443,20 +445,23 @@ class InputsOverlay(OverlayWindow):
         """Track temperature · air temperature · current lap, in a chip hanging below the pill."""
         g = self.graphics
         air, road = air_temp(f, g), track_temp(f)
-        items = [(icon_road, f"{road:.0f} °C" if road is not None else "–"),
-                 (icon_wind, f"{air:.0f} °C" if air is not None else "–"),
-                 (icon_stopwatch, lap_time(g.current_lap_time_ms) if g is not None else "–")]
-        p.setFont(font(10))
+        # (icon, text, widest expected text): each item reserves its template's width, so the chip
+        # keeps one size while the lap time ticks.
+        items = [(icon_road, f"{road:.0f} °C" if road is not None else "–", "88 °C"),
+                 (icon_wind, f"{air:.0f} °C" if air is not None else "–", "88 °C"),
+                 (icon_stopwatch, lap_time(g.current_lap_time_ms) if g is not None else "–", "8:88.888")]
+        p.setFont(font(10, tabular=True))
         metrics = p.fontMetrics()
         icon, gap, pad, spacing = 12, 5, 12, 16
-        widths = [icon + gap + metrics.horizontalAdvance(text) for _, text in items]
+        widths = [icon + gap + max(metrics.horizontalAdvance(text), metrics.horizontalAdvance(template))
+                  for _, text, template in items]
         chip_w = sum(widths) + spacing * (len(items) - 1) + 2 * pad
         chip = QRectF(CHIP_CX - chip_w / 2, PH - CHIP_OVERLAP, chip_w, CHIP_H)
         p.setPen(QPen(EDGE, 1))
         p.setBrush(QColor(28, 28, 34, 240))
         p.drawRoundedRect(chip, CHIP_H / 2, CHIP_H / 2)
         x = chip.x() + pad
-        for (draw_icon, text), width in zip(items, widths):
+        for (draw_icon, text, _), width in zip(items, widths):
             draw_icon(p, QRectF(x, chip.center().y() - icon / 2, icon, icon))
             p.setPen(TEXT)
             p.drawText(QRectF(x + icon + gap, chip.y(), width, CHIP_H), Qt.AlignLeft | Qt.AlignVCenter, text)
