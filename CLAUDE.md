@@ -68,8 +68,9 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   them doesn't take focus from the game.
 - The HUD is a pill. Its rounded ends are thin TC/ABS arc lines (upper quarter TC, lower quarter
   ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). The gear ring
-  (throttle on 3/4, brake on the bottom 1/4) is concentric with the left end, then come the dot shift
-  lights over KPH/RPM and the trace, then the position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
+  is concentric with the left end. Throttle fills 3/4 clockwise from the top-left (135°) and brake the
+  west quarter, with the gear and speed inside it. Then come the dot shift lights (the only RPM display;
+  there's no RPM number) over the trace, which starts at `CX0`, then the position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
   constant-driven at the top of `overlay.py` (`PH`, `R`, `RING_*`, `CX0`, `TRACE_*`, `POS_*`, `W`):
   extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
 - Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the

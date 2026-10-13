@@ -25,8 +25,8 @@ TEXT = QColor("#f2f2f2")
 DIM = QColor(255, 255, 255, 110)
 
 # The pill. Its rounded ends carry the TC / ABS arcs (left end = car's left wheels, right end = right
-# wheels; upper quarter TC, lower quarter ABS). The gear ring sits inside the left end; then the dot
-# shift lights over KPH/RPM and the trace, then the position. The chip hangs off the bottom edge.
+# wheels; upper quarter TC, lower quarter ABS). The gear ring (with the speed) sits inside the left end;
+# then the dot shift lights over the trace, then the position. The chip hangs off the bottom edge.
 PH = 112  # pill height
 R = PH // 2  # end radius
 CHIP_H = 26
@@ -35,11 +35,10 @@ ARC_R, ARC_W = R - 5, 3.5  # TC / ABS end arcs: radius (to stroke centre) and st
 RING_CX, RING_CY, RING_R, RING_W = R, R, 42, 7  # gear ring, concentric with the left end
 CX0 = RING_CX + RING_R + 18  # start of the middle section
 DOT_Y, DOT_D = 20, 9  # shift-light row centre and dot diameter
-READ_W = 128  # KPH / RPM block
-TRACE_X, TRACE_Y, TRACE_W, TRACE_H = CX0 + READ_W + 12, 36, 220, 52  # the time window is Config.trace_seconds
+TRACE_X, TRACE_Y, TRACE_W, TRACE_H = CX0, 36, 360, 52  # the time window is Config.trace_seconds
 POS_X, POS_W = TRACE_X + TRACE_W + 12, 80
 W = POS_X + POS_W + R - 20  # the position runs a little way into the right end's curve
-CHIP_CX = (CX0 + TRACE_X + TRACE_W) / 2  # chip centred under KPH/RPM + trace
+CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
 
 SHIFT_LEDS = 15  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
@@ -327,7 +326,6 @@ class InputsOverlay(OverlayWindow):
         self.draw_end_arcs(p)
         self.draw_ring(p, f)
         self.draw_dots(p, f)
-        self.draw_readouts(p, f)
         self.draw_trace(p)
         self.draw_position(p)
         self.draw_chip(p, f)
@@ -347,12 +345,12 @@ class InputsOverlay(OverlayWindow):
                 p.drawArc(box, int((start + gap / 2) * 16), int((90 - gap) * 16))
 
     def draw_ring(self, p, f):
-        """Gear in a ring: throttle fills 3/4 of it clockwise over the top (green), brake fills the
-        bottom quarter the other way (red). Both start at the bottom-left."""
+        """Gear and speed in a ring: throttle fills 3/4 of it clockwise over the top and right
+        (green), brake fills the west quarter downwards (red). Both start at the top-left."""
         box = QRectF(RING_CX - RING_R, RING_CY - RING_R, 2 * RING_R, 2 * RING_R)
         gap = 4  # degrees between the two tracks
-        throttle = (225 - gap / 2, -(270 - gap))  # (start, full span), Qt angles: CCW from 3 o'clock
-        brake = (225 + gap / 2, 90 - gap)
+        throttle = (135 - gap / 2, -(270 - gap))  # (start, full span), Qt angles: CCW from 3 o'clock
+        brake = (135 + gap / 2, 90 - gap)
         for (start, span), value, color in ((throttle, f.gas, THROTTLE), (brake, f.brake, BRAKE)):
             p.setPen(QPen(TRACK, RING_W, Qt.SolidLine, Qt.FlatCap))
             p.drawArc(box, int(start * 16), int(span * 16))
@@ -361,9 +359,15 @@ class InputsOverlay(OverlayWindow):
                 p.setPen(QPen(color, RING_W, Qt.SolidLine, Qt.FlatCap))
                 p.drawArc(box, int(start * 16), int(span * value * 16))
         gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
+        cx, cy, w = RING_CX, RING_CY, 60
         p.setPen(TEXT)
-        p.setFont(font(30, QFont.Bold))
-        p.drawText(box, Qt.AlignCenter, gear)
+        p.setFont(font(22, QFont.Bold))
+        p.drawText(QRectF(cx - w / 2, cy - 30, w, 34), Qt.AlignHCenter | Qt.AlignBottom, gear)
+        p.setFont(font(13, QFont.Bold))
+        p.drawText(QRectF(cx - w / 2, cy + 4, w, 18), Qt.AlignCenter, f"{f.speedKmh:.0f}")
+        p.setPen(DIM)
+        p.setFont(font(6.5))
+        p.drawText(QRectF(cx - w / 2, cy + 21, w, 10), Qt.AlignCenter, "KPH")
 
     def draw_dots(self, p, f):
         """Shift lights as dots, spread evenly from rpm_start to rpm_flash; each takes the colour of
@@ -384,17 +388,6 @@ class InputsOverlay(OverlayWindow):
                 color = DOT_OFF
             p.setBrush(color)
             p.drawEllipse(QPointF(x0 + i * step, DOT_Y), DOT_D / 2, DOT_D / 2)
-
-    def draw_readouts(self, p, f):
-        half = READ_W / 2
-        for i, (label, value) in enumerate((("KPH", f"{f.speedKmh:.0f}"), ("RPM", f"{f.rpms}"))):
-            x = CX0 + i * half
-            p.setPen(DIM)
-            p.setFont(font(8))
-            p.drawText(QRectF(x, 36, half, 14), Qt.AlignLeft | Qt.AlignVCenter, label)
-            p.setPen(TEXT)
-            p.setFont(font(19, QFont.Bold))
-            p.drawText(QRectF(x, 48, half + 8, 34), Qt.AlignLeft | Qt.AlignVCenter, value)
 
     def draw_trace(self, p):
         """Each reading is placed by its real age, so the right edge is always the live input and

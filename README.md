@@ -23,11 +23,12 @@
 
 ## Features
 
-- **Gear and pedal ring.** The gear sits inside a ring at the left end of the pill: throttle fills
-  three quarters of it in green, and brake fills the bottom quarter in red.
-- **Shift lights.** A row of 15 dots with configurable colour zones and flash point.
-- **Speed, RPM and position** at a glance. Position shows as "P19" (with "of 20" underneath)
-  whenever the game ranks the session.
+- **Gear and pedal ring.** A ring at the left end of the pill, with the gear and speed inside it.
+  Throttle fills three quarters of it in green, clockwise from the top-left, and brake fills the left
+  quarter in red.
+- **Shift lights.** A row of 15 dots with configurable colour zones and flash point. They're also
+  the RPM readout.
+- **Position.** Shows as "P19" (with "of 20" underneath) whenever the game ranks the session.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always
   your live input, and the time window (2–30 s) can be changed on the fly. The brake line turns orange
   while ABS works, and the throttle line yellow while TC cuts.
@@ -68,7 +69,7 @@
   <tr>
     <td width="50%">
       <img src="docs/images/abs-braking.png" alt="Left ABS arc lit while trail braking">
-      <p align="center"><sub><b>Trail braking into a left-hander.</b> The ring's red quarter shows the brake, and only the left ABS arc lights, where the unloaded inside wheels lock first.</sub></p>
+      <p align="center"><sub><b>Trail braking into a left-hander.</b> The ring's red left quarter shows the brake, and only the left ABS arc lights, where the unloaded inside wheels lock first.</sub></p>
     </td>
     <td width="50%">
       <img src="docs/images/tc-exit.png" alt="Left TC arc lit on corner exit">
