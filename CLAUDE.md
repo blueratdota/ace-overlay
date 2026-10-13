@@ -46,6 +46,12 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   it read 0.66 on the naturally aspirated BMW M3 E46 CSL, where every boost field stayed 0 over 2,000
   full-throttle samples. Live boost on a real turbo car is still unverified. (The HUD's boost/torque
   bar was dropped in the pill redesign; `current_torque` is live if it's ever needed.)
+- **Hybrid battery (verified live, Ferrari SF25, 2026-10-13):** `graphics.has_kers` tells hybrids
+  apart (False on the Dallara EXP, True on the SF25). `graphics.kers_charge_perc` is the charge (0..1).
+  `graphics.kers_current_perc` is the live flow, −1..+1: positive while deploying (averages +0.20 at
+  full throttle), negative while recovering (−0.80 under braking). Physics `kersCharge`, `kersInput`
+  and `kersCurrentKJ` are **always 0**. `current_bhp` / `current_torque` are live (SF25 peaked at
+  943 hp / 572 Nm).
 - **Always log `graphics.car_model` in live probes.** The user switches cars between sessions, and
   findings must be attributed to the right car.
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
@@ -67,8 +73,11 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   be its own window**. See `SideButton` (pin, gear). Those use `WindowDoesNotAcceptFocus` so clicking
   them doesn't take focus from the game.
 - The HUD is a pill. Its rounded ends are thin TC/ABS arc lines (upper quarter TC, lower quarter
-  ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). The position
-  sits inside the left end. Then come the dot shift lights (the only RPM display; there's no RPM
+  ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). Inside the left
+  end, the energy ring (same size and style as the pedal ring, drawn by the shared `draw_tracks`)
+  surrounds the position. Top half: battery charge, or power on non-hybrids. Bottom half: live battery
+  usage, or torque. Both fill from the west. Power and torque scale to the car's session peak
+  (`track_engine`), floored at 100 hp / 100 Nm. Then come the dot shift lights (the only RPM display; there's no RPM
   number; 26 dots along the top edge) over the trace, which starts right after the left end and fills
   the height down to the chip. The gear ring is concentric with the right end: throttle fills 3/4
   clockwise from the top-left (135°) and brake the west quarter, with the gear and speed inside it. A

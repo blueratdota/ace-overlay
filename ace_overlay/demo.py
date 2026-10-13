@@ -101,6 +101,10 @@ class DemoSource:
             p.tyreTempI[w], p.tyreTempM[w], p.tyreTempO[w] = self._temps[w]
         p.airTemp, p.roadTemp = 24.0, 33.0
         self.graphics = self._graphics(now, t)
+        # Engine output: a torque curve peaking mid-range, scaled by throttle; engine braking off it.
+        torque = 420 * gas * (0.7 + 0.3 * math.sin(math.pi * rpm / MAX_RPM)) if gas > 0.05 else -40.0
+        self.graphics.current_torque = torque
+        self.graphics.current_bhp = int(max(0.0, torque) * rpm / 7127)  # hp = Nm × rpm / 7127
         return p
 
     def _graphics(self, now, t):

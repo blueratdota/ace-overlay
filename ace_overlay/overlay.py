@@ -16,6 +16,10 @@ BRAKE = QColor("#ff4d4d")
 CLUTCH = QColor("#4da3ff")
 YELLOW = QColor("#ffd23f")
 ORANGE = QColor("#ff8c3f")
+CHARGE = QColor("#29d3e6")  # energy ring: battery charge
+POWER = QColor("#ffb547")  # energy ring: engine power (cars without a battery)
+OUTPUT = QColor("#b07cff")  # energy ring: battery deploying / engine torque
+REGEN = QColor("#5ee6a8")  # energy ring: battery recovering energy
 BG = QColor(12, 12, 16, 180)
 PILL_BG = QColor(10, 10, 14, 225)
 EDGE = QColor(255, 255, 255, 40)
@@ -25,22 +29,23 @@ TEXT = QColor("#f2f2f2")
 DIM = QColor(255, 255, 255, 110)
 
 # The pill. Its rounded ends carry the TC / ABS arcs (left end = car's left wheels, right end = right
-# wheels; upper quarter TC, lower quarter ABS). The position sits inside the left end; then the dot shift
-# lights along the top edge over the trace; then the gear ring (with the speed) inside the right end.
-# The chip hangs below the bottom edge.
+# wheels; upper quarter TC, lower quarter ABS). Inside the left end: the energy ring (battery, or power
+# and torque) around the position. Then the dot shift lights along the top edge over the trace. Inside
+# the right end: the pedal ring around the gear and speed. The chip hangs below the bottom edge.
 PH = 100  # pill height
 R = PH // 2  # end radius
 CHIP_H, CHIP_OVERLAP = 24, 6  # the chip only tucks this far up into the pill
 H = PH + CHIP_H - CHIP_OVERLAP + 1
 ARC_R, ARC_W = R - 5, 3.5  # TC / ABS end arcs: radius (to stroke centre) and stroke
-POS_X, POS_W = R - 37, 34  # the position fits inside the left end's half circle
+RING_R, RING_W = 37, 6  # both rings: radius (to stroke centre) and stroke
+ENERGY_CX = R  # energy ring, concentric with the left end
 DOT_Y, DOT_D = 9, 8  # shift-light row centre (close to the top edge) and dot diameter
-TRACE_X, TRACE_Y, TRACE_W = R + 4, 20, 360  # starts right next to the left end; window is Config.trace_seconds
+TRACE_X, TRACE_Y, TRACE_W = ENERGY_CX + RING_R + 16, 20, 360  # the time window is Config.trace_seconds
 TRACE_H = PH - CHIP_OVERLAP - 4 - TRACE_Y  # down to just above the chip
-RING_R, RING_W = 37, 6
-RING_CX, RING_CY = TRACE_X + TRACE_W + 16 + RING_R, R  # gear ring, concentric with the right end
+RING_CX, RING_CY = TRACE_X + TRACE_W + 16 + RING_R, R  # pedal ring, concentric with the right end
 W = RING_CX + R
 CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
+POWER_FLOOR_HP, TORQUE_FLOOR_NM = 100.0, 100.0  # minimum full scale for the power / torque halves
 
 SHIFT_LEDS = 26  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
@@ -261,6 +266,7 @@ class InputsOverlay(OverlayWindow):
         self.settings_dialog = None
         self.frame = self.graphics = None
         self.last_driving = float("-inf")  # last time is_driving() was true
+        self.engine_car, self.peak_hp, self.peak_torque = None, 0.0, 0.0  # see track_engine()
         self.trace = deque()  # (time, gas, brake, clutch, tc_working, abs_working) for every tick
         self.aid_trace_until = {"tc": 0.0, "abs": 0.0}  # car-wide, for the trace colouring
         # (aid, side) -> time that end arc stops flashing; side 0 = left, 1 = right
@@ -286,6 +292,8 @@ class InputsOverlay(OverlayWindow):
     def tick(self):
         f = self.frame = self.source.read()
         self.graphics = self.source.graphics
+        if self.graphics is not None:
+            self.track_engine(self.graphics)
         now = time.monotonic()
         if is_driving(self.graphics):
             self.last_driving = now
@@ -332,7 +340,7 @@ class InputsOverlay(OverlayWindow):
         self.draw_ring(p, f)
         self.draw_dots(p, f)
         self.draw_trace(p)
-        self.draw_position(p)
+        self.draw_energy(p, f)
         self.draw_chip(p, f)
 
     def draw_end_arcs(self, p):
@@ -349,20 +357,25 @@ class InputsOverlay(OverlayWindow):
                 p.setPen(QPen(color if on else TRACK, ARC_W + (1.5 if on else 0), Qt.SolidLine, Qt.FlatCap))
                 p.drawArc(box, int((start + gap / 2) * 16), int((90 - gap) * 16))
 
-    def draw_ring(self, p, f):
-        """Gear and speed in a ring: throttle fills 3/4 of it clockwise over the top and right
-        (green), brake fills the west quarter downwards (red). Both start at the top-left."""
-        box = QRectF(RING_CX - RING_R, RING_CY - RING_R, 2 * RING_R, 2 * RING_R)
-        gap = 4  # degrees between the two tracks
-        throttle = (135 - gap / 2, -(270 - gap))  # (start, full span), Qt angles: CCW from 3 o'clock
-        brake = (135 + gap / 2, 90 - gap)
-        for (start, span), value, color in ((throttle, f.gas, THROTTLE), (brake, f.brake, BRAKE)):
+    @staticmethod
+    def draw_tracks(p, cx, tracks):
+        """A ring of arc tracks centred on (cx, R): each track is (start, full span, value 0..1, colour)
+        in Qt angles (degrees, CCW from 3 o'clock), filled from its start."""
+        box = QRectF(cx - RING_R, R - RING_R, 2 * RING_R, 2 * RING_R)
+        for start, span, value, color in tracks:
             p.setPen(QPen(TRACK, RING_W, Qt.SolidLine, Qt.FlatCap))
             p.drawArc(box, int(start * 16), int(span * 16))
             value = max(0.0, min(1.0, value))
             if value > 0.005:
                 p.setPen(QPen(color, RING_W, Qt.SolidLine, Qt.FlatCap))
                 p.drawArc(box, int(start * 16), int(span * value * 16))
+
+    def draw_ring(self, p, f):
+        """Gear and speed in a ring: throttle fills 3/4 of it clockwise over the top and right
+        (green), brake fills the west quarter downwards (red). Both start at the top-left."""
+        gap = 4  # degrees between the two tracks
+        self.draw_tracks(p, RING_CX, ((135 - gap / 2, -(270 - gap), f.gas, THROTTLE),
+                                      (135 + gap / 2, 90 - gap, f.brake, BRAKE)))
         gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
         cx, cy, w = RING_CX, RING_CY, 56
         p.setPen(TEXT)
@@ -430,16 +443,51 @@ class InputsOverlay(OverlayWindow):
             p.drawPath(run)
         p.restore()
 
-    def draw_position(self, p):
+    def track_engine(self, g):
+        """Peak power and torque for the current car, the full scale of the energy ring's halves.
+        Reset when the car changes."""
+        car = bytes(g.car_model)
+        if car != self.engine_car:
+            self.engine_car, self.peak_hp, self.peak_torque = car, 0.0, 0.0
+        self.peak_hp = max(self.peak_hp, g.current_bhp)
+        self.peak_torque = max(self.peak_torque, g.current_torque)
+
+    def energy(self, f, g):
+        """(label, top value, top colour, bottom value, bottom colour) for the energy ring: battery
+        charge and live usage on hybrids, otherwise power and torque against this car's session peak.
+
+        Verified live on the Ferrari SF25: kers_charge_perc is the charge (0..1) and kers_current_perc the
+        live flow, -1..+1 (positive deploying on throttle, negative recovering under braking). The
+        physics kersCharge / kersInput / kersCurrentKJ stay 0 in EVO.
+        """
+        if g is None:
+            return "PWR · TRQ", 0.0, POWER, 0.0, OUTPUT
+        if g.has_kers:
+            flow = g.kers_current_perc
+            return "BATT", g.kers_charge_perc, CHARGE, abs(flow), OUTPUT if flow >= 0 else REGEN
+        return ("PWR · TRQ", g.current_bhp / max(self.peak_hp, POWER_FLOOR_HP), POWER,
+                g.current_torque / max(self.peak_torque, TORQUE_FLOOR_NM), OUTPUT)
+
+    def draw_energy(self, p, f):
+        """Ring in the left end around the position: the top half fills clockwise from the west with
+        battery charge (or power), the bottom half the other way with live battery flow (purple
+        deploying, green recovering) or torque."""
         g = self.graphics
+        label, top, top_color, bottom, bottom_color = self.energy(f, g)
+        gap = 4
+        self.draw_tracks(p, ENERGY_CX, ((180 - gap / 2, -(180 - gap), top, top_color),
+                                        (180 + gap / 2, 180 - gap, bottom, bottom_color)))
+        cx, cy, w = ENERGY_CX, R, 56
         pos = g.current_pos if g is not None else 0
         p.setPen(ORANGE if pos else DIM)
-        p.setFont(font(13, QFont.Bold))
-        p.drawText(QRectF(POS_X, R - 17, POS_W, 22), Qt.AlignCenter, f"P{pos}" if pos else "P–")
+        p.setFont(font(15, QFont.Bold))
+        p.drawText(QRectF(cx - w / 2, cy - 21, w, 22), Qt.AlignHCenter | Qt.AlignBottom, f"P{pos}" if pos else "P–")
+        p.setPen(DIM)
         if pos and g.total_drivers:
-            p.setPen(DIM)
             p.setFont(font(6.5))
-            p.drawText(QRectF(POS_X, R + 4, POS_W, 11), Qt.AlignCenter, f"OF {g.total_drivers}")
+            p.drawText(QRectF(cx - w / 2, cy + 2, w, 10), Qt.AlignCenter, f"OF {g.total_drivers}")
+        p.setFont(font(5.5))
+        p.drawText(QRectF(cx - w / 2, cy + 13, w, 9), Qt.AlignCenter, label)
 
     def draw_chip(self, p, f):
         """Track temperature · air temperature · current lap, in a chip hanging below the pill."""
