@@ -5,18 +5,11 @@ import math
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter
 
-from .overlay import BRAKE, CLUTCH, DIM, TEXT, THROTTLE, TRACK, YELLOW, OverlayWindow, PinButton
+from .overlay import BRAKE, CLUTCH, DIM, TEXT, THROTTLE, TRACK, YELLOW, OverlayWindow, PinButton, lap_time
+from .shm import air_temp, track_temp
 from .tyres import EPS, TyreAdvisor
 
 PANEL_W, PANEL_H, PAD = 300, 364, 12
-
-
-def lap_time(ms):
-    """1:48.978, or an en dash when there's no time yet."""
-    if ms <= 0:
-        return "–"
-    minutes, rest = divmod(ms, 60_000)
-    return f"{minutes}:{rest / 1000:06.3f}"
 
 
 def clock(ms):
@@ -244,10 +237,11 @@ class InfoPanel(OverlayWindow):
             self.value(p, QRectF(r.x(), r.y() + 11, r.width(), 16), text, 10, align=Qt.AlignHCenter)
 
         y += 34
+        air, road = air_temp(f, g), track_temp(f)
         self.label(p, QRectF(PAD, y, 40, 14), "AIR")
-        self.value(p, QRectF(PAD + 20, y, 40, 14), f"{f.airTemp:.0f}°", 9)
+        self.value(p, QRectF(PAD + 20, y, 40, 14), f"{air:.0f}°" if air is not None else "–", 9)
         self.label(p, QRectF(PAD + 58, y, 40, 14), "TRACK")
-        self.value(p, QRectF(PAD + 90, y, 40, 14), f"{f.roadTemp:.0f}°", 9)
+        self.value(p, QRectF(PAD + 90, y, 40, 14), f"{road:.0f}°" if road is not None else "–", 9)
         if g.gap_ahead or g.gap_behind:
             self.label(p, QRectF(PANEL_W - PAD - 130, y, 30, 14), "GAP")
             self.value(p, QRectF(PANEL_W - PAD - 110, y, 110, 14),

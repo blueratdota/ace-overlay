@@ -1,4 +1,4 @@
-"""Transparent, always-on-top, click-through inputs overlay."""
+"""Transparent, always-on-top, click-through HUD: a compact "pill" dash."""
 
 import time
 from collections import deque
@@ -9,77 +9,58 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 from .config import TRACE_MAX_SECONDS, Config, SettingsDialog
-from .shm import is_driving
+from .shm import air_temp, is_driving, track_temp
 
 THROTTLE = QColor("#3ddc84")
 BRAKE = QColor("#ff4d4d")
 CLUTCH = QColor("#4da3ff")
 YELLOW = QColor("#ffd23f")
 ORANGE = QColor("#ff8c3f")
-BOOST = QColor("#b07cff")
 BG = QColor(12, 12, 16, 180)
+PILL_BG = QColor(10, 10, 14, 225)
+EDGE = QColor(255, 255, 255, 40)
 TRACK = QColor(255, 255, 255, 28)
+DOT_OFF = QColor(255, 255, 255, 60)
 TEXT = QColor("#f2f2f2")
 DIM = QColor(255, 255, 255, 110)
 
-PAD = 10
-SHIFT_H = 14  # full-width shift-light strip along the top
-CT = PAD + SHIFT_H + 8  # top of the content row below it
-CH = 96  # content row height
-H = CT + CH + PAD
-
-# Content row, left to right: TC/ABS (left side) | pedals | trace | gear/speed/rpm | tyres | TC/ABS (right side)
-AID_W = 34
-PEDAL_X, PEDAL_W, PEDAL_GAP = PAD + AID_W + PAD, 26, 4
-TRACE_X = PEDAL_X + 3 * PEDAL_W + 2 * PEDAL_GAP + PAD
-TRACE_W = 240  # the time window it shows is Config.trace_seconds
-DASH_X = TRACE_X + TRACE_W + PAD
-DASH_W = 138
-BOOST_H = 14  # turbo boost row along the bottom of the dash column
-BOOST_Y = CT + CH - BOOST_H
-TYRE_X = DASH_X + DASH_W + PAD
-TYRE_W = 120
-AID_RIGHT_X = TYRE_X + TYRE_W + PAD
-W = AID_RIGHT_X + AID_W + PAD
+# The pill: half-circle ends (TC left, ABS right), then left to right inside it:
+# gear ring | dot shift lights over KPH/RPM and the trace | position. The chip hangs off the bottom edge.
+PH = 112  # pill height
+R = PH // 2  # end radius
+CHIP_H = 26
+H = PH + CHIP_H // 2 + 2
+RING_CX, RING_CY, RING_R, RING_W = R + 52, R, 42, 7  # gear ring centre, radius (to stroke centre), stroke
+CX0 = RING_CX + RING_R + 18  # start of the middle section
+DOT_Y, DOT_D = 20, 9  # shift-light row centre and dot diameter
+READ_W = 128  # KPH / RPM block
+TRACE_X, TRACE_Y, TRACE_W, TRACE_H = CX0 + READ_W + 12, 36, 220, 52  # the time window is Config.trace_seconds
+POS_X, POS_W = TRACE_X + TRACE_W + 12, 80
+W = POS_X + POS_W + 4 + R
+CHIP_CX = (CX0 + TRACE_X + TRACE_W) / 2  # chip centred under KPH/RPM + trace
 
 SHIFT_LEDS = 15  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
-SIDE_SLIP_SHARE = 0.7  # a side lights if its wheel slip is at least this share of the worst side
 HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stops, to avoid flicker
-BAR_TO_PSI = 14.5038
-TORQUE_FLOOR_NM = 100.0  # minimum full-scale for the torque bar
-
-# Tyre surface temperature (°C) -> colour. Generic racing-slick window; tune per compound.
-TYRE_STOPS = [(50, QColor("#3b6cff")), (75, THROTTLE), (95, THROTTLE), (105, YELLOW), (115, BRAKE)]
 
 BASE_FLAGS = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
 
 
-def tyre_color(temp):
-    if temp <= TYRE_STOPS[0][0]:
-        return TYRE_STOPS[0][1]
-    for (t0, c0), (t1, c1) in zip(TYRE_STOPS, TYRE_STOPS[1:]):
-        if temp <= t1:
-            k = (temp - t0) / (t1 - t0)
-            return QColor(int(c0.red() + (c1.red() - c0.red()) * k),
-                          int(c0.green() + (c1.green() - c0.green()) * k),
-                          int(c0.blue() + (c1.blue() - c0.blue()) * k))
-    return TYRE_STOPS[-1][1]
+def font(size, weight=QFont.DemiBold):
+    """Bahnschrift (built into Windows 10+) for the dash look, falling back to Segoe UI."""
+    f = QFont()
+    f.setFamilies(["Bahnschrift", "Segoe UI"])
+    f.setPointSizeF(size)
+    f.setWeight(weight)
+    return f
 
 
-def slipping_sides(slip_ratio):
-    """(left, right) - which side(s) of the car a TC/ABS intervention is working on.
-
-    The game only reports TC/ABS as a single flag, so the side is taken from per-wheel slip:
-    a side lights if its worst wheel slips at least SIDE_SLIP_SHARE as much as the worst
-    wheel overall. With no slip data, both sides light.
-    """
-    left = max(abs(slip_ratio[0]), abs(slip_ratio[2]))  # FL, RL
-    right = max(abs(slip_ratio[1]), abs(slip_ratio[3]))  # FR, RR
-    worst = max(left, right)
-    if worst < 1e-3:
-        return True, True
-    return left >= worst * SIDE_SLIP_SHARE, right >= worst * SIDE_SLIP_SHARE
+def lap_time(ms):
+    """1:48.978, or an en dash when there's no time yet."""
+    if ms <= 0:
+        return "–"
+    minutes, rest = divmod(ms, 60_000)
+    return f"{minutes}:{rest / 1000:06.3f}"
 
 
 class SideButton(QWidget):
@@ -233,16 +214,17 @@ class OverlayWindow(QWidget):
         if not self.locked and event.button() == Qt.LeftButton:
             self.windowHandle().startSystemMove()
 
-    def paint_background(self, p):
-        """Translucent card, plus a dashed yellow border while unpinned."""
-        w, h = self.width(), self.height()
-        p.setPen(Qt.NoPen)
-        p.setBrush(BG)
-        p.drawRoundedRect(QRectF(0, 0, w, h), 8, 8)
+    def paint_background(self, p, rect=None, radius=8, fill=BG, edge=None):
+        """Translucent card (the whole window unless `rect` is given), plus a dashed yellow outline
+        while unpinned."""
+        rect = rect or QRectF(0, 0, self.width(), self.height())
+        p.setPen(QPen(edge, 1) if edge else Qt.NoPen)
+        p.setBrush(fill)
+        p.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
         if not self.locked:
             p.setPen(QPen(YELLOW, 2, Qt.DashLine))
             p.setBrush(Qt.NoBrush)
-            p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 8, 8)
+            p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius - 1, radius - 1)
 
 
 class InputsOverlay(OverlayWindow):
@@ -257,12 +239,9 @@ class InputsOverlay(OverlayWindow):
         self.settings_dialog = None
         self.frame = self.graphics = None
         self.last_driving = float("-inf")  # last time is_driving() was true
-        self.engine_car, self.boost_live, self.peak_torque = None, False, 0.0  # see track_engine()
         self.trace = deque()  # (time, gas, brake, clutch, tc_working, abs_working) for every tick
-        self.aid_trace_until = {"tc": 0.0, "abs": 0.0}
+        self.aid_until = {"tc": 0.0, "abs": 0.0}  # time each light stops flashing
         self.blink = 0
-        # (aid, side) -> time the light stops flashing; side 0 = left, 1 = right
-        self.aid_until = {(aid, side): 0.0 for aid in ("tc", "abs") for side in (0, 1)}
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
@@ -283,8 +262,6 @@ class InputsOverlay(OverlayWindow):
     def tick(self):
         f = self.frame = self.source.read()
         self.graphics = self.source.graphics
-        if self.graphics is not None:
-            self.track_engine(self.graphics)
         now = time.monotonic()
         if is_driving(self.graphics):
             self.last_driving = now
@@ -292,14 +269,10 @@ class InputsOverlay(OverlayWindow):
         if f is not None:
             for aid, active in (("tc", f.tcInAction), ("abs", f.absInAction)):
                 if active:
-                    self.aid_trace_until[aid] = now + AID_HOLD_S
-                    for side, lit in enumerate(slipping_sides(f.slipRatio)):
-                        if lit:
-                            self.aid_until[aid, side] = now + AID_HOLD_S
+                    self.aid_until[aid] = now + AID_HOLD_S
             # Keep every reading for the longest window the settings allow, with whether TC / ABS were
             # working (held like the lights, so a flickering flag gives a solid stretch of colour).
-            self.trace.append((now, f.gas, f.brake, f.clutch,
-                               now < self.aid_trace_until["tc"], now < self.aid_trace_until["abs"]))
+            self.trace.append((now, f.gas, f.brake, f.clutch, now < self.aid_until["tc"], now < self.aid_until["abs"]))
             while self.trace[0][0] < now - TRACE_MAX_SECONDS:
                 self.trace.popleft()
         self.blink = (self.blink + 1) % 16
@@ -318,65 +291,101 @@ class InputsOverlay(OverlayWindow):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        self.paint_background(p)
+        self.paint_background(p, QRectF(0, 0, W, PH), R, PILL_BG, EDGE)
 
         f = self.frame
         if f is None:
             p.setPen(DIM)
-            p.setFont(QFont("Segoe UI", 11))
-            p.drawText(self.rect(), Qt.AlignCenter, "Waiting for Assetto Corsa EVO…")
+            p.setFont(font(11, QFont.Normal))
+            p.drawText(QRectF(0, 0, W, PH), Qt.AlignCenter, "Waiting for Assetto Corsa EVO…")
             return
 
-        self.draw_shift_lights(p, f)
-        self.draw_pedals(p, f)
+        self.draw_caps(p)
+        self.draw_ring(p, f)
+        self.draw_dots(p, f)
+        self.draw_readouts(p, f)
         self.draw_trace(p)
-        self.draw_gear_speed(p, f)
-        self.draw_engine_bar(p)
-        self.draw_aids(p)
-        self.draw_tyres(p, f)
+        self.draw_position(p)
+        self.draw_chip(p, f)
 
-    def draw_shift_lights(self, p, f):
-        """Lights spread evenly from rpm_start to rpm_flash; each takes the colour of its own RPM %."""
+    def draw_caps(self, p):
+        """The pill's half-circle ends are the TC (left) and ABS (right) lights."""
+        now = time.monotonic()
+        flash_on = (self.blink // 4) % 2 == 0  # ~7.5 Hz at 60 fps
+        inset = 4
+        disc = QRectF(inset, inset, PH - 2 * inset, PH - 2 * inset)
+        for aid, label, color, x0, start in (("tc", "TC", YELLOW, 0, 90), ("abs", "ABS", ORANGE, W - PH, 270)):
+            on = now < self.aid_until[aid] and flash_on
+            half = QPainterPath()
+            half.moveTo(x0 + R, R)
+            half.arcTo(disc.translated(x0, 0), start, 180)
+            half.closeSubpath()
+            p.setPen(Qt.NoPen)
+            p.setBrush(color if on else TRACK)
+            p.drawPath(half)
+            # Label centred in the half that's inside the pill.
+            text_x = x0 + inset if aid == "tc" else x0 + R
+            p.setPen(QColor("#111") if on else DIM)
+            p.setFont(font(9, QFont.Bold))
+            p.drawText(QRectF(text_x, 0, R - inset, PH), Qt.AlignCenter, label)
+
+    def draw_ring(self, p, f):
+        """Gear in a ring: throttle fills 3/4 of it clockwise over the top (green), brake fills the
+        bottom quarter the other way (red). Both start at the bottom-left."""
+        box = QRectF(RING_CX - RING_R, RING_CY - RING_R, 2 * RING_R, 2 * RING_R)
+        gap = 4  # degrees between the two tracks
+        throttle = (225 - gap / 2, -(270 - gap))  # (start, full span), Qt angles: CCW from 3 o'clock
+        brake = (225 + gap / 2, 90 - gap)
+        for (start, span), value, color in ((throttle, f.gas, THROTTLE), (brake, f.brake, BRAKE)):
+            p.setPen(QPen(TRACK, RING_W, Qt.SolidLine, Qt.FlatCap))
+            p.drawArc(box, int(start * 16), int(span * 16))
+            value = max(0.0, min(1.0, value))
+            if value > 0.005:
+                p.setPen(QPen(color, RING_W, Qt.SolidLine, Qt.FlatCap))
+                p.drawArc(box, int(start * 16), int(span * value * 16))
+        gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
+        p.setPen(TEXT)
+        p.setFont(font(30, QFont.Bold))
+        p.drawText(box, Qt.AlignCenter, gear)
+
+    def draw_dots(self, p, f):
+        """Shift lights as dots, spread evenly from rpm_start to rpm_flash; each takes the colour of
+        its own RPM %."""
         c = self.config
-        gap = 4
-        led_w = (W - 2 * PAD - (SHIFT_LEDS - 1) * gap) / SHIFT_LEDS
         pct = 100 * f.rpms / f.currentMaxRpm if f.currentMaxRpm > 0 else 0.0
         flash = pct >= c.rpm_flash
+        x0, x1 = CX0 + DOT_D / 2, TRACE_X + TRACE_W - DOT_D / 2
+        step = (x1 - x0) / (SHIFT_LEDS - 1)
+        p.setPen(Qt.NoPen)
         for i in range(SHIFT_LEDS):
             led_pct = c.rpm_start + (c.rpm_flash - c.rpm_start) * i / SHIFT_LEDS
             if flash:
-                color = QColor(c.flash_color) if self.blink < 8 else TRACK
+                color = QColor(c.flash_color) if self.blink < 8 else DOT_OFF
             elif pct >= led_pct:
                 color = c.rpm_color(led_pct)
             else:
-                color = TRACK
-            p.setPen(Qt.NoPen)
+                color = DOT_OFF
             p.setBrush(color)
-            p.drawRoundedRect(QRectF(PAD + i * (led_w + gap), PAD, led_w, SHIFT_H), 3, 3)
+            p.drawEllipse(QPointF(x0 + i * step, DOT_Y), DOT_D / 2, DOT_D / 2)
 
-    def draw_pedals(self, p, f):
-        label_h = 14
-        bar_h = CH - label_h
-        p.setFont(QFont("Consolas", 8, QFont.Bold))
-        for i, (value, color) in enumerate(((f.clutch, CLUTCH), (f.brake, BRAKE), (f.gas, THROTTLE))):
-            value = max(0.0, min(1.0, value))
-            x = PEDAL_X + i * (PEDAL_W + PEDAL_GAP)
-            p.setPen(Qt.NoPen)
-            p.setBrush(TRACK)
-            p.drawRoundedRect(QRectF(x, CT, PEDAL_W, bar_h), 3, 3)
-            fill = bar_h * value
-            p.setBrush(color)
-            p.drawRoundedRect(QRectF(x, CT + bar_h - fill, PEDAL_W, fill), 3, 3)
-            p.setPen(color)
-            p.drawText(QRectF(x - 2, CT + bar_h, PEDAL_W + 4, label_h), Qt.AlignCenter, f"{value * 100:.0f}%")
+    def draw_readouts(self, p, f):
+        half = READ_W / 2
+        for i, (label, value) in enumerate((("KPH", f"{f.speedKmh:.0f}"), ("RPM", f"{f.rpms}"))):
+            x = CX0 + i * half
+            p.setPen(DIM)
+            p.setFont(font(8))
+            p.drawText(QRectF(x, 36, half, 14), Qt.AlignLeft | Qt.AlignVCenter, label)
+            p.setPen(TEXT)
+            p.setFont(font(19, QFont.Bold))
+            p.drawText(QRectF(x, 48, half + 8, 34), Qt.AlignLeft | Qt.AlignVCenter, value)
 
     def draw_trace(self, p):
         """Each reading is placed by its real age, so the right edge is always the live input and
         changing the time window rescales the whole trace at once."""
-        x0, w = TRACE_X, TRACE_W
+        x0, y0, w, h = TRACE_X, TRACE_Y, TRACE_W, TRACE_H
         p.setPen(Qt.NoPen)
         p.setBrush(TRACK)
-        p.drawRoundedRect(QRectF(x0, CT, w, CH), 4, 4)
+        p.drawRoundedRect(QRectF(x0, y0, w, h), 6, 6)
         if len(self.trace) < 2:
             return
         now = self.trace[-1][0]
@@ -386,13 +395,13 @@ class InputsOverlay(OverlayWindow):
         first = next((i for i, s in enumerate(self.trace) if s[0] >= cutoff), len(self.trace) - 1)
         visible = list(islice(self.trace, max(0, first - 1), None))
         p.save()
-        p.setClipRect(QRectF(x0, CT, w, CH))
+        p.setClipRect(QRectF(x0, y0, w, h))
         p.setBrush(Qt.NoBrush)
         # (value index, colour, width, flag index, colour while that aid works): the brake line turns
         # orange while ABS works and the throttle line yellow while TC cuts, like the lights.
         for idx, color, width, flag, aid_color in ((3, CLUTCH, 1.5, None, None), (2, BRAKE, 2, 5, ORANGE),
                                                    (1, THROTTLE, 2, 4, YELLOW)):
-            points = [(x0 + w - (now - s[0]) * px_per_s, CT + CH - 2 - (CH - 4) * max(0.0, min(1.0, s[idx])),
+            points = [(x0 + w - (now - s[0]) * px_per_s, y0 + h - 3 - (h - 6) * max(0.0, min(1.0, s[idx])),
                        flag is not None and s[flag]) for s in visible]
             # Split the line into runs of one colour; a segment takes the state of its newer point.
             run, run_lit = QPainterPath(QPointF(*points[0][:2])), points[1][2]
@@ -406,108 +415,68 @@ class InputsOverlay(OverlayWindow):
             p.drawPath(run)
         p.restore()
 
-    def draw_gear_speed(self, p, f):
-        gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
-        p.setPen(TEXT)
-        p.setFont(QFont("Segoe UI", 46, QFont.Bold))
-        p.drawText(QRectF(DASH_X, CT - 2, 62, BOOST_Y - CT), Qt.AlignCenter, gear)
-
-        right_x, right_w = DASH_X + 64, DASH_W - 64
-        p.setFont(QFont("Consolas", 22, QFont.Bold))
-        p.drawText(QRectF(right_x, CT, right_w, 30), Qt.AlignRight | Qt.AlignVCenter, f"{f.speedKmh:.0f}")
-        p.setPen(DIM)
-        p.setFont(QFont("Segoe UI", 8))
-        p.drawText(QRectF(right_x, CT + 28, right_w, 14), Qt.AlignRight, "km/h")
-
-        p.setFont(QFont("Segoe UI", 7, QFont.Bold))
-        p.drawText(QRectF(right_x, CT + 44, right_w, 12), Qt.AlignRight, "RPM")
-        p.setPen(TEXT)
-        p.setFont(QFont("Consolas", 13, QFont.Bold))
-        p.drawText(QRectF(right_x, CT + 54, right_w, 20), Qt.AlignRight | Qt.AlignVCenter, f"{f.rpms}")
-
-    def track_engine(self, g):
-        """Per-car state for the engine bar: whether the game sends live boost, and peak torque so far.
-        Reset when the car changes."""
-        car = bytes(g.car_model)
-        if car != self.engine_car:
-            self.engine_car, self.boost_live, self.peak_torque = car, False, 0.0
-        if abs(g.turbo_boost) > 1e-3:
-            self.boost_live = True  # some cars (e.g. the Golf 8 R) only publish max_turbo_boost
-        self.peak_torque = max(self.peak_torque, g.current_torque)
-
-    def draw_engine_bar(self, p):
-        """Bar under the gear / RPM. Turbo boost in psi (fill relative to the car's maximum, negative
-        off throttle) when the game sends live boost; otherwise live engine torque in Nm, filled
-        against the most the engine has produced this session, which includes the turbo's effect."""
+    def draw_position(self, p):
         g = self.graphics
-        if g is not None and self.boost_live and g.max_turbo_boost > 0:
-            label, frac = "BOOST psi", g.turbo_boost / g.max_turbo_boost
-            psi = g.turbo_boost * BAR_TO_PSI
-            text = f"{psi:.1f}" if psi >= -0.05 else f"−{-psi:.1f}"
-        elif g is not None:
-            # Floor the scale so idling or an engine that's off doesn't read as a full bar.
-            scale = max(self.peak_torque, TORQUE_FLOOR_NM)
-            label, frac, text = "TORQUE Nm", g.current_torque / scale, f"{max(0.0, g.current_torque):.0f}"
-        else:
-            label, frac, text = "BOOST psi", 0.0, "–"
+        pos = g.current_pos if g is not None else 0
+        p.setPen(ORANGE if pos else DIM)
+        p.setFont(font(24, QFont.Bold))
+        p.drawText(QRectF(POS_X, 26, POS_W, 40), Qt.AlignRight | Qt.AlignVCenter, f"P{pos}" if pos else "P–")
+        if pos and g.total_drivers:
+            p.setPen(DIM)
+            p.setFont(font(8))
+            p.drawText(QRectF(POS_X, 64, POS_W, 14), Qt.AlignRight | Qt.AlignVCenter, f"OF {g.total_drivers}")
 
-        row = QRectF(DASH_X, BOOST_Y, DASH_W, BOOST_H)
-        label_w, value_w = 58, 28
-        p.setPen(DIM)
-        p.setFont(QFont("Segoe UI", 7, QFont.Bold))
-        p.drawText(QRectF(row.x(), row.y(), label_w, row.height()), Qt.AlignLeft | Qt.AlignVCenter, label)
-        bar = QRectF(row.x() + label_w, row.y() + (row.height() - 6) / 2, row.width() - label_w - value_w - 4, 6)
-        p.setPen(Qt.NoPen)
-        p.setBrush(TRACK)
-        p.drawRoundedRect(bar, 3, 3)
-        p.setBrush(BOOST)
-        p.drawRoundedRect(QRectF(bar.x(), bar.y(), bar.width() * max(0.0, min(1.0, frac)), bar.height()), 3, 3)
-        p.setPen(TEXT if text != "–" else DIM)
-        p.setFont(QFont("Consolas", 9, QFont.Bold))
-        p.drawText(QRectF(row.right() - value_w, row.y(), value_w, row.height()), Qt.AlignRight | Qt.AlignVCenter, text)
-
-    def draw_aids(self, p):
-        """TC above ABS on each side of the overlay; a side flashes while that side is intervening."""
-        now = time.monotonic()
-        flash_on = (self.blink // 4) % 2 == 0  # ~7.5 Hz at 60 fps
-        chip_h = (CH - 6) / 2
-        p.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        for side, x in enumerate((PAD, AID_RIGHT_X)):
-            for row, (aid, label, color) in enumerate((("tc", "TC", YELLOW), ("abs", "ABS", ORANGE))):
-                r = QRectF(x, CT + row * (chip_h + 6), AID_W, chip_h)
-                on = now < self.aid_until[aid, side] and flash_on
-                p.setPen(Qt.NoPen)
-                p.setBrush(color if on else TRACK)
-                p.drawRoundedRect(r, 5, 5)
-                p.setPen(QColor("#111") if on else DIM)
-                p.drawText(r, Qt.AlignCenter, label)
-
-    def draw_tyres(self, p, f):
-        """Top-down car: each tyre split into surface bands, outer edge facing outward."""
-        num_w, tyre_w, tyre_h, mid_gap = 30, 22, 42, 10
-        x_left_tyre = TYRE_X + num_w + 3
-        x_right_tyre = x_left_tyre + tyre_w + mid_gap
-        rows = (CT, CT + CH - tyre_h)
-        p.setFont(QFont("Consolas", 10, QFont.Bold))
-        for wheel in range(4):  # FL, FR, RL, RR
-            left_side = wheel % 2 == 0
-            x = x_left_tyre if left_side else x_right_tyre
-            y = rows[wheel // 2]
-            inner, middle, outer = f.tyreTempI[wheel], f.tyreTempM[wheel], f.tyreTempO[wheel]
-            bands = (outer, middle, inner) if left_side else (inner, middle, outer)
-
-            clip = QPainterPath()
-            clip.addRoundedRect(QRectF(x, y, tyre_w, tyre_h), 5, 5)
-            p.save()
-            p.setClipPath(clip)
-            p.setPen(Qt.NoPen)
-            for b, temp in enumerate(bands):
-                p.setBrush(tyre_color(temp))
-                p.drawRect(QRectF(x + b * tyre_w / 3, y, tyre_w / 3 + 0.5, tyre_h))
-            p.restore()
-
-            avg = (inner + middle + outer) / 3
-            num_x = TYRE_X if left_side else x_right_tyre + tyre_w + 3
-            align = (Qt.AlignRight if left_side else Qt.AlignLeft) | Qt.AlignVCenter
+    def draw_chip(self, p, f):
+        """Track temperature · air temperature · current lap, in a chip over the pill's bottom edge."""
+        g = self.graphics
+        air, road = air_temp(f, g), track_temp(f)
+        items = [(icon_road, f"{road:.0f} °C" if road is not None else "–"),
+                 (icon_wind, f"{air:.0f} °C" if air is not None else "–"),
+                 (icon_stopwatch, lap_time(g.current_lap_time_ms) if g is not None else "–")]
+        p.setFont(font(10))
+        metrics = p.fontMetrics()
+        icon, gap, pad, spacing = 12, 5, 12, 16
+        widths = [icon + gap + metrics.horizontalAdvance(text) for _, text in items]
+        chip_w = sum(widths) + spacing * (len(items) - 1) + 2 * pad
+        chip = QRectF(CHIP_CX - chip_w / 2, PH - CHIP_H / 2, chip_w, CHIP_H)
+        p.setPen(QPen(EDGE, 1))
+        p.setBrush(QColor(28, 28, 34, 240))
+        p.drawRoundedRect(chip, CHIP_H / 2, CHIP_H / 2)
+        x = chip.x() + pad
+        for (draw_icon, text), width in zip(items, widths):
+            draw_icon(p, QRectF(x, chip.center().y() - icon / 2, icon, icon))
             p.setPen(TEXT)
-            p.drawText(QRectF(num_x, y, num_w, tyre_h), align, f"{avg:.0f}°")
+            p.drawText(QRectF(x + icon + gap, chip.y(), width, CHIP_H), Qt.AlignLeft | Qt.AlignVCenter, text)
+            x += width + spacing
+
+
+# --- chip icons (12 px line drawings) --------------------------------------------------------------
+
+def icon_road(p, r):
+    """A road narrowing into the distance, with a dashed centre line."""
+    p.setPen(QPen(DIM, 1.4))
+    p.drawLine(QPointF(r.left() + 1, r.bottom()), QPointF(r.center().x() - 2, r.top()))
+    p.drawLine(QPointF(r.right() - 1, r.bottom()), QPointF(r.center().x() + 2, r.top()))
+    p.setPen(QPen(DIM, 1.4, Qt.DashLine))
+    p.drawLine(QPointF(r.center().x(), r.bottom()), QPointF(r.center().x(), r.top() + 1))
+
+
+def icon_wind(p, r):
+    """Three gusts with curled ends."""
+    p.setPen(QPen(DIM, 1.4, Qt.SolidLine, Qt.RoundCap))
+    p.setBrush(Qt.NoBrush)
+    for dy, length in ((2.5, 0.75), (6, 1.0), (9.5, 0.6)):
+        y = r.top() + dy
+        end = r.left() + r.width() * length
+        p.drawLine(QPointF(r.left(), y), QPointF(end - 2, y))
+        p.drawArc(QRectF(end - 4, y - 2.5, 3, 2.5), -90 * 16, 270 * 16)
+
+
+def icon_stopwatch(p, r):
+    """Watch face with a crown and a hand."""
+    p.setPen(QPen(DIM, 1.4, Qt.SolidLine, Qt.RoundCap))
+    p.setBrush(Qt.NoBrush)
+    face = QRectF(r.left() + 1, r.top() + 2.5, r.width() - 2, r.height() - 2.5)
+    p.drawEllipse(face)
+    p.drawLine(QPointF(face.center().x(), r.top()), QPointF(face.center().x(), face.top()))
+    p.drawLine(face.center(), QPointF(face.center().x() + 2, face.center().y() - 2.5))

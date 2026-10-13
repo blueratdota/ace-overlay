@@ -44,16 +44,17 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   shows while unpinned. The setting is off by default.
 - **Turbo:** `graphics.turbo_boost` (bar, relative). `max_turbo_boost` **can't tell turbo cars apart**:
   it read 0.66 on the naturally aspirated BMW M3 E46 CSL, where every boost field stayed 0 over 2,000
-  full-throttle samples. Live boost on a real turbo car is still unverified. The HUD bar therefore shows
-  boost only once `turbo_boost` has been non-zero for the current car, and otherwise live
-  `current_torque` (Nm) scaled to the session peak (`track_engine` / `draw_engine_bar`).
+  full-throttle samples. Live boost on a real turbo car is still unverified. (The HUD's boost/torque
+  bar was dropped in the pill redesign; `current_torque` is live if it's ever needed.)
 - **Always log `graphics.car_model` in live probes.** The user switches cars between sessions, and
   findings must be attributed to the right car.
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
   It's handled like ABS (`tcInAction | tc > 0 | tc_active`).
 - **Tyre wear isn't published** anywhere in shared memory (physics `tyreWear` is always 0). Don't add it.
-- **TC/ABS side is inferred.** The game only sends car-wide flags, so `slipping_sides()` picks the
-  side from per-wheel `slipRatio` (populated during ABS on the Golf; graphics `TyreState.lock` never fired).
+- **TC/ABS are car-wide flags only.** Per-wheel `slipRatio` is populated during ABS, if side info is
+  ever wanted again; graphics `TyreState.lock` never fired. The pill HUD has one TC and one ABS light.
+- **Physics `airTemp`/`roadTemp` read 0 in some states** (seen with status 3). Use `shm.air_temp()`
+  (falls back to graphics `air_temperature_c`) and `shm.track_temp()` (None → "–").
 - For live investigation, attach to both blocks while the user drives and count how often each
   candidate signal fires. Don't trust docs alone: several documented fields are dead in EVO.
 - Attach with `OpenFileMappingW`, never `mmap.mmap(tagname=...)`: mmap silently creates an empty
@@ -65,11 +66,16 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - The locked overlay is click-through (`WindowTransparentForInput`), so **any clickable control must
   be its own window**. See `SideButton` (pin, gear). Those use `WindowDoesNotAcceptFocus` so clicking
   them doesn't take focus from the game.
-- The layout is constant-driven at the top of `overlay.py` (`CT`, `CH`, `*_X`, `W`). Add sections by
-  extending that chain, not with hard-coded coordinates.
+- The HUD is a pill: half-circle ends are the TC (left) and ABS (right) lights, then the gear ring
+  (throttle on 3/4, brake on the bottom 1/4), dot shift lights over KPH/RPM and the trace, then the
+  position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
+  constant-driven at the top of `overlay.py` (`PH`, `R`, `RING_*`, `CX0`, `TRACE_*`, `POS_*`, `W`):
+  extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
+- Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the
+  user's request. Tyre data lives in the info panel.
 - **Settings:** add a field to the `Config` dataclass (`config.py`) and a widget in `SettingsDialog`.
   Load/save is generic. Dev runs persist to the registry; the frozen exe uses `settings.ini` beside itself.
-- The input trace stores `(time, gas, brake, clutch)` every tick and positions points by age, so the
+- The input trace stores `(time, gas, brake, clutch, tc, abs)` every tick and positions points by age, so the
   right edge is always live and changing `trace_seconds` rescales instantly.
 
 ## Keep in mind

@@ -15,7 +15,6 @@ V_EXIT, V_TOP, V_APEX = 120.0, 225.0, 90.0  # km/h at lap start, end of straight
 DEMO_LAP_MS = 92_000  # the info panel reports each 10 s demo lap as a 1:32 lap
 DEMO_COLD_PSI = (26.0, 26.2, 24.6, 29.4)  # FL, FR, RL, RR garage pressures: fronts right, rears one low / one high
 DEMO_WINDOW_PSI = (27.0, 31.0)  # ideal pressure window; normalised = 1.0 inside, ±1/3 per psi outside
-DEMO_MAX_BOOST, DEMO_VACUUM = 1.4, -0.3  # bar
 DEMO_WINDOW_C = (60.0, 95.0)  # ideal temperature window (surface ±1/30 per °C, core ±1/20 per °C outside)
 
 
@@ -48,7 +47,6 @@ class DemoSource:
         # They start at the 40 °C garage temperature, like leaving the pits on fresh tyres.
         self._temps = [[40.0, 40.0, 40.0] for _ in range(4)]
         self._bulk = [40.0] * 4
-        self._boost = 0.0  # bar
         self.graphics = None  # Graphics snapshot from the last read(), like LiveSource
 
     def read(self):
@@ -78,13 +76,6 @@ class DemoSource:
 
         self._update_tyres(dt, gas, brake, corner)
 
-        # Turbo: spools towards a throttle- and rpm-dependent target, dumps on shifts, vacuum off throttle.
-        target = DEMO_MAX_BOOST * gas * min(1.0, rpm / 5500) if gas > 0.05 else DEMO_VACUUM
-        if now < self._shift_until:
-            target = min(target, 0.2)
-        rate = 2.5 if target > self._boost else 6.0
-        self._boost += (target - self._boost) * min(1.0, rate * dt)
-
         self._packet += 1
         p = Physics()
         p.packetId = self._packet
@@ -98,14 +89,6 @@ class DemoSource:
         # ABS chatters under heavy braking; TC cuts in on the corner exit.
         p.absInAction = int(brake > 0.55 and int(now * 20) % 3 != 0)
         p.tcInAction = int(7.9 < t < 8.9 and int(now * 14) % 2 == 0)
-        # Per-wheel slip: braking locks the unloaded inside (left) wheels more as the car turns in;
-        # on the exit the inside rear spins up.
-        lock = brake * 0.12
-        spin = gas * 0.18 if 7.9 < t < 8.9 else 0.0
-        p.slipRatio[0] = -lock * (1 + 2 * corner)  # FL
-        p.slipRatio[1] = -lock  # FR
-        p.slipRatio[2] = -lock * 0.6 * (1 + 2 * corner) + spin  # RL
-        p.slipRatio[3] = -lock * 0.6 + spin * 0.3  # RR
         for w in range(4):
             p.tyreTempI[w], p.tyreTempM[w], p.tyreTempO[w] = self._temps[w]
         p.airTemp, p.roadTemp = 24.0, 33.0
@@ -116,8 +99,6 @@ class DemoSource:
         """Info-panel data. The 10 s demo lap is reported as a 1:32 lap, ticking at that pace."""
         g = Graphics()
         g.status = STATUS_LIVE  # out on track, so "only while driving" shows the HUD
-        g.max_turbo_boost, g.turbo_boost = DEMO_MAX_BOOST, self._boost
-        g.current_torque = 280 + 140 * max(0.0, self._boost) / DEMO_MAX_BOOST if self._boost > 0 else -40.0
         elapsed = now - self._start
         lap_index = int(elapsed // 10)
         g.npos = t / 10

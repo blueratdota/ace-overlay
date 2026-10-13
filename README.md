@@ -2,7 +2,8 @@
 
 <p align="center">
   <strong>A lightweight, real-time telemetry overlay for Assetto Corsa EVO.</strong><br>
-  Inputs, trace, shift lights, tyre temperatures and TC/ABS in one compact HUD that sits on top of the game.
+  A compact pill-shaped dash (gear and pedal ring, shift lights, speed, RPM, position, input trace and TC/ABS)
+  plus an info panel for timing, fuel and tyre pressures, sitting on top of the game.
 </p>
 
 <p align="center">
@@ -15,26 +16,25 @@
 
 <p align="center">
   <img src="docs/images/overlay-demo.gif" alt="AC EVO Overlay running through a lap" width="780">
-  <br><sub>One demo lap: flat out down the straight, a trail-braked left-hander with ABS, and TC on the exit.</sub>
+  <br><sub>One demo lap: flat out down the straight with the shift lights, heavy braking with ABS, and TC on the exit.</sub>
 </p>
 
 ---
 
 ## Features
 
-- **Pedal inputs.** Clutch, brake and throttle bars with the exact percentage under each.
+- **Gear and pedal ring.** The gear sits inside a ring: throttle fills three quarters of it in green,
+  and brake fills the bottom quarter in red.
+- **Shift lights.** A row of 15 dots with configurable colour zones and flash point.
+- **Speed, RPM and position** at a glance. Position shows as "P19" (with "of 20" underneath)
+  whenever the game ranks the session.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always
-  your live input, and the time window (2–30 s) can be changed on the fly.
-- **Shift lights.** A full-width, 15-light RPM strip with configurable colour zones and flash point.
-- **Gear, speed and RPM** at a glance.
-- **Boost / torque bar.** Under the RPM: turbo boost in psi (filled relative to the car's maximum,
-  negative off throttle) when the game sends live boost for the car. Otherwise it shows live engine
-  torque in Nm, filled against the session peak, which includes the turbo's effect.
-- **Tyre temperatures.** Each tyre shows inner, middle and outer surface temperatures as colour
-  bands, with the average beside it, laid out like the car seen from above.
-- **Side-aware TC and ABS lights.** Flashing lights on both sides of the HUD. The side that lights
-  up is the side the system is working on. The input trace also changes colour while they work:
-  the brake line turns orange under ABS, and the throttle line turns yellow under TC.
+  your live input, and the time window (2–30 s) can be changed on the fly. The brake line turns orange
+  while ABS works, and the throttle line yellow while TC cuts.
+- **TC and ABS lights.** The pill's two rounded ends: the left end flashes yellow when traction
+  control cuts in, and the right end flashes orange when ABS works.
+- **Track, air and lap time.** A chip under the dash with track temperature, air temperature and the
+  running time of your current lap.
 - **Info panel.** A second, separately placed window for race-engineer data: live delta to your best
   lap, lap times, fuel per lap and laps of fuel left, fuel needed to reach the end of the session,
   tyre pressures against the recommended pressure, brake bias, TC/ABS/engine map settings, weather,
@@ -66,18 +66,18 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/abs-trail-braking.png" alt="ABS light on the inside of the corner">
-      <p align="center"><sub><b>Trail braking into a left-hander.</b> ABS lights on the inside (left), where the unloaded wheels lock first.</sub></p>
+      <img src="docs/images/abs-braking.png" alt="ABS end lit while braking">
+      <p align="center"><sub><b>Heavy braking.</b> The ring's red quarter shows the brake, and the right end lights orange while ABS works.</sub></p>
     </td>
     <td width="50%">
-      <img src="docs/images/tc-exit.png" alt="TC light on corner exit">
-      <p align="center"><sub><b>Corner exit.</b> TC cuts in on the inside rear, and the right-side tyres show the heat from the corner.</sub></p>
+      <img src="docs/images/tc-exit.png" alt="TC end lit on corner exit">
+      <p align="center"><sub><b>Corner exit.</b> The left end lights yellow while TC cuts, and the throttle line in the trace turns yellow.</sub></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
       <img src="docs/images/shift-lights.png" alt="Shift lights flashing">
-      <p align="center"><sub><b>Shift point.</b> The whole strip flashes when RPM reaches the flash threshold.</sub></p>
+      <p align="center"><sub><b>Shift point.</b> Every dot flashes when RPM reaches the flash threshold.</sub></p>
     </td>
     <td width="50%">
       <img src="docs/images/move-mode.png" alt="Overlay unpinned for repositioning">
@@ -149,21 +149,6 @@ The pin and gear fade out while you drive and light up when you hover over them.
 | Only show the HUD while driving | off | Hides the HUD in menus, the garage or pit box, replays and pause, and shows it once you leave the pit box (the pit lane counts as driving). The info panel isn't affected. While the HUD is hidden, use the tray icon for *Move overlays* (which shows it for positioning) and *Settings…*. |
 | Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
 
-### Reading the tyres
-
-Each tyre is split into three bands (outer, middle, inner), with the outer band on the outside of
-the car. The number is the average surface temperature.
-
-| Colour | Surface temperature |
-| --- | --- |
-| 🟦 Blue | Cold, 50 °C and below |
-| 🟩 Green | Optimal window, 75–95 °C |
-| 🟨 Yellow | Getting hot, around 105 °C |
-| 🟥 Red | Overheating, 115 °C and above |
-
-The window suits typical racing slicks. Adjust `TYRE_STOPS` in
-[`ace_overlay/overlay.py`](ace_overlay/overlay.py) for other compounds.
-
 ## How it works
 
 AC EVO publishes live telemetry through Windows named shared memory. This is the same official
@@ -172,18 +157,15 @@ interface dashboards and tools like SimHub use. The overlay opens two of those b
 never modifies game files and never injects into the game process.
 
 ```
-             ┌─▶ Local\acevo_pmf_physics   pedals, gear, speed, RPM, wheel slip, ABS/TC ─┐
-AC EVO ──────┤                                                                          ├──▶ ace-overlay ──▶ transparent HUD
-             └─▶ Local\acevo_pmf_graphics  per-tyre surface temperatures, ABS/TC flags ──┘
+             ┌─▶ Local\acevo_pmf_physics   pedals, gear, speed, RPM, ABS/TC, temperatures ─┐
+AC EVO ──────┤                                                                            ├──▶ ace-overlay ──▶ transparent HUD
+             └─▶ Local\acevo_pmf_graphics  position, laps, fuel, tyres, ABS/TC flags ──────┘
 ```
 
 ### Good to know
 
 - **Tyre wear isn't shown.** AC EVO doesn't publish it. The in-game HUD calculates it internally
   and never writes it to shared memory.
-- **The TC/ABS side is inferred.** The game reports TC and ABS as single on/off flags. The overlay
-  picks the side from per-wheel slip, and lights both sides when they're close or when no slip data
-  is available.
 - **Early access.** AC EVO is still in development and Kunos can change the telemetry layout
   between patches. If values look wrong after an update, run **`Check telemetry.bat`** (or
   `python -m ace_overlay --dump`) while driving and compare against the in-game HUD, then

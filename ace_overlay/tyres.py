@@ -58,6 +58,8 @@ class Window:
 KNOWN_WINDOWS = {
     # Golf 8 R and BMW M3 E46 CSL, 2026-09-29 / 2026-10-11
     "SuperCar (SC)": {"pressure": (27.0, None), "surface": (60.0, 95.0), "core": (60.0, None)},
+    # Dallara EXP, 2026-10-13 (both fronts agreed on the 30.0 psi top edge; low edge not yet seen)
+    "Slicks (S)": {"pressure": (None, 30.0), "surface": (70.0, 105.0), "core": (70.0, 105.0)},
 }
 MARGIN_PSI = 0.5  # aim this far inside the pressure window
 

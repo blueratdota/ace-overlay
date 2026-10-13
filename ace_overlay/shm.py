@@ -384,6 +384,21 @@ class SharedBlock:
         return out
 
 
+def air_temp(physics, graphics):
+    """Air temperature in °C, or None. Physics airTemp reads 0 in some states (seen during a replay),
+    where the graphics block's whole-degree air temperature still works."""
+    if physics is not None and physics.airTemp:
+        return physics.airTemp
+    if graphics is not None and graphics.air_temperature_c:
+        return float(graphics.air_temperature_c)
+    return None
+
+
+def track_temp(physics):
+    """Track temperature in °C, or None when the game sends 0 (no graphics-block equivalent)."""
+    return physics.roadTemp if physics is not None and physics.roadTemp else None
+
+
 def is_driving(graphics):
     """True once the car is out of the garage / pit box in a live session (pit lane counts)."""
     return graphics is not None and graphics.status == STATUS_LIVE and not graphics.is_in_pit_box

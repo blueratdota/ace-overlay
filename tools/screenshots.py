@@ -133,8 +133,7 @@ def main():
     for k, frame in enumerate(samples):
         sheet.paste(frame, (0, fh * k))
     ui = [overlay_module.THROTTLE, overlay_module.BRAKE, overlay_module.CLUTCH, overlay_module.YELLOW,
-          overlay_module.ORANGE, overlay_module.TEXT, QColor(Config().flash_color),
-          *(color for _, color in overlay_module.TYRE_STOPS)]
+          overlay_module.ORANGE, overlay_module.TEXT, QColor(Config().flash_color)]
     block = fw // len(ui)
     for k, color in enumerate(ui):
         sheet.paste(color.name(), (k * block, fh * len(samples), (k + 1) * block, fh * (len(samples) + 1)))
@@ -152,9 +151,8 @@ def main():
     run_until(lambda f: f.rpms >= 0.97 * f.currentMaxRpm)
     still("shift-lights.png")
 
-    # Wait until only the left light is on (the right side's hold from straight-line braking has expired).
-    run_until(lambda f: overlay.aid_until["abs", 0] > clock.t >= overlay.aid_until["abs", 1])
-    still("abs-trail-braking.png")
+    run_until(lambda f: f.brake > 0.7 and clock.t < overlay.aid_until["abs"])
+    still("abs-braking.png")
 
     run_until(lambda f: f.tcInAction and 8.2 < lap_time() < 8.6)
     still("tc-exit.png")

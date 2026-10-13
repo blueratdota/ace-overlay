@@ -3,7 +3,8 @@ import unittest
 
 from types import SimpleNamespace
 
-from ace_overlay.shm import STATUS_LIVE, Electronics, Graphics, Physics, SessionState, TyreState, is_driving
+from ace_overlay.shm import (STATUS_LIVE, Electronics, Graphics, Physics, SessionState, TyreState, air_temp,
+                             is_driving, track_temp)
 
 
 class PhysicsLayoutTest(unittest.TestCase):
@@ -60,6 +61,18 @@ class DrivingTest(unittest.TestCase):
         self.assertFalse(is_driving(SimpleNamespace(status=live, is_in_pit_box=True)))
         self.assertFalse(is_driving(SimpleNamespace(status=live + 1, is_in_pit_box=False)))
         self.assertFalse(is_driving(None))
+
+
+class TemperatureTest(unittest.TestCase):
+    def test_air_falls_back_to_graphics_when_physics_reads_zero(self):
+        self.assertEqual(air_temp(SimpleNamespace(airTemp=28.3), SimpleNamespace(air_temperature_c=26)), 28.3)
+        self.assertEqual(air_temp(SimpleNamespace(airTemp=0.0), SimpleNamespace(air_temperature_c=26)), 26.0)
+        self.assertIsNone(air_temp(SimpleNamespace(airTemp=0.0), SimpleNamespace(air_temperature_c=0)))
+        self.assertIsNone(air_temp(None, None))
+
+    def test_track_zero_means_unknown(self):
+        self.assertEqual(track_temp(SimpleNamespace(roadTemp=30.0)), 30.0)
+        self.assertIsNone(track_temp(SimpleNamespace(roadTemp=0.0)))
 
 
 if __name__ == "__main__":
