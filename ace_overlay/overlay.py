@@ -45,6 +45,7 @@ TRACE_H = PH - CHIP_OVERLAP - 4 - TRACE_Y  # down to just above the chip
 RING_CX, RING_CY = TRACE_X + TRACE_W + 16 + RING_R, R  # pedal ring, concentric with the right end
 W = RING_CX + R
 CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
+FLOW_W, FLOW_GAP = 6, 6  # hybrids only: battery flow bar at the trace's left, which narrows the trace
 POWER_FLOOR_HP, TORQUE_FLOOR_NM = 100.0, 100.0  # minimum full scale for the power / torque halves
 
 SHIFT_LEDS = 26  # thresholds and colours come from Config
@@ -339,7 +340,11 @@ class InputsOverlay(OverlayWindow):
         self.draw_end_arcs(p)
         self.draw_ring(p, f)
         self.draw_dots(p, f)
-        self.draw_trace(p)
+        if self.graphics is not None and self.graphics.has_kers:
+            self.draw_flow(p, self.graphics)
+            self.draw_trace(p, TRACE_X + FLOW_W + FLOW_GAP, TRACE_W - FLOW_W - FLOW_GAP)
+        else:
+            self.draw_trace(p, TRACE_X, TRACE_W)
         self.draw_energy(p, f)
         self.draw_chip(p, f)
 
@@ -407,10 +412,10 @@ class InputsOverlay(OverlayWindow):
             p.setBrush(color)
             p.drawEllipse(QPointF(x0 + i * step, DOT_Y), DOT_D / 2, DOT_D / 2)
 
-    def draw_trace(self, p):
+    def draw_trace(self, p, x0, w):
         """Each reading is placed by its real age, so the right edge is always the live input and
         changing the time window rescales the whole trace at once."""
-        x0, y0, w, h = TRACE_X, TRACE_Y, TRACE_W, TRACE_H
+        y0, h = TRACE_Y, TRACE_H
         p.setPen(Qt.NoPen)
         p.setBrush(TRACK)
         p.drawRoundedRect(QRectF(x0, y0, w, h), 6, 6)
@@ -462,16 +467,30 @@ class InputsOverlay(OverlayWindow):
         """
         if g is None:
             return "PWR · TRQ", 0.0, POWER, 0.0, OUTPUT
-        if g.has_kers:
-            flow = g.kers_current_perc
-            return "BATT", g.kers_charge_perc, CHARGE, abs(flow), OUTPUT if flow >= 0 else REGEN
-        return ("PWR · TRQ", g.current_bhp / max(self.peak_hp, POWER_FLOOR_HP), POWER,
-                g.current_torque / max(self.peak_torque, TORQUE_FLOOR_NM), OUTPUT)
+        power = g.current_bhp / max(self.peak_hp, POWER_FLOOR_HP)
+        if g.has_kers:  # the live flow has its own bar left of the trace (draw_flow)
+            return "BATT · PWR", g.kers_charge_perc, CHARGE, power, POWER
+        return "PWR · TRQ", power, POWER, g.current_torque / max(self.peak_torque, TORQUE_FLOOR_NM), OUTPUT
+
+    def draw_flow(self, p, g):
+        """Hybrids: battery flow as a centre-zero bar left of the trace, growing up (purple) while
+        deploying and down (green) while recovering."""
+        bar = QRectF(TRACE_X, TRACE_Y, FLOW_W, TRACE_H)
+        mid, half = bar.center().y(), bar.height() / 2
+        p.setPen(Qt.NoPen)
+        p.setBrush(TRACK)
+        p.drawRoundedRect(bar, FLOW_W / 2, FLOW_W / 2)
+        flow = max(-1.0, min(1.0, g.kers_current_perc))
+        if abs(flow) > 0.01:
+            p.setBrush(OUTPUT if flow > 0 else REGEN)
+            length = abs(flow) * half
+            p.drawRoundedRect(QRectF(bar.x(), mid - length if flow > 0 else mid, FLOW_W, length), 2, 2)
+        p.setBrush(DIM)
+        p.drawRect(QRectF(bar.x() - 1, mid - 0.5, FLOW_W + 2, 1))  # zero mark
 
     def draw_energy(self, p, f):
         """Ring in the left end around the position: the top half fills clockwise from the west with
-        battery charge (or power), the bottom half the other way with live battery flow (purple
-        deploying, green recovering) or torque."""
+        battery charge (hybrids) or power, the bottom half the other way with power (hybrids) or torque."""
         g = self.graphics
         label, top, top_color, bottom, bottom_color = self.energy(f, g)
         gap = 4

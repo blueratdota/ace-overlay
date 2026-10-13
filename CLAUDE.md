@@ -75,9 +75,11 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - The HUD is a pill. Its rounded ends are thin TC/ABS arc lines (upper quarter TC, lower quarter
   ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). Inside the left
   end, the energy ring (same size and style as the pedal ring, drawn by the shared `draw_tracks`)
-  surrounds the position. Top half: battery charge, or power on non-hybrids. Bottom half: live battery
-  usage, or torque. Both fill from the west. Power and torque scale to the car's session peak
-  (`track_engine`), floored at 100 hp / 100 Nm. Then come the dot shift lights (the only RPM display; there's no RPM
+  surrounds the position. Top half: battery charge (hybrids) or power. Bottom half: power (hybrids) or
+  torque. Both fill from the west. Power and torque scale to the car's session peak (`track_engine`),
+  floored at 100 hp / 100 Nm. Hybrids also get a centre-zero battery-flow bar (`draw_flow`,
+  `FLOW_W`) at the trace's left: up purple deploying, down green recovering. The trace narrows by
+  `FLOW_W + FLOW_GAP` only then. Then come the dot shift lights (the only RPM display; there's no RPM
   number; 26 dots along the top edge) over the trace, which starts right after the left end and fills
   the height down to the chip. The gear ring is concentric with the right end: throttle fills 3/4
   clockwise from the top-left (135°) and brake the west quarter, with the gear and speed inside it. A

@@ -29,9 +29,13 @@
 - **Shift lights.** A row of 26 dots along the top edge, with configurable colour zones and flash point. They're also
   the RPM readout.
 - **Energy ring and position.** In the left end of the pill, a ring like the pedal ring surrounds
-  your position ("P19 of 20"). On hybrids, the top half shows battery charge, and the bottom half live
-  battery usage: purple while deploying, green while recovering energy under braking. On other cars it shows engine power (top) and torque (bottom), against the highest
-  values the car has produced this session. A small label inside says which (BATT or PWR · TRQ).
+  your position ("P19 of 20"). On hybrids, the top half shows battery charge and the bottom half engine
+  power. On other cars it shows engine power (top) and torque (bottom). Power and torque fill against
+  the highest values the car has produced this session. A small label inside says which
+  (BATT · PWR or PWR · TRQ).
+- **Battery flow bar (hybrids).** A thin centre-zero bar just left of the trace. It grows up in
+  purple while the battery deploys and down in green while it recovers energy. On cars without a
+  battery it's hidden and the trace takes its place.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always
   your live input, and the time window (2–30 s) can be changed on the fly. The brake line turns orange
   while ABS works, and the throttle line yellow while TC cuts.
