@@ -87,6 +87,8 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   It uses tabular digits and per-item template widths, so it never resizes as the lap time ticks. The layout is
   constant-driven at the top of `overlay.py` (`PH`, `R`, `POS_*`, `TRACE_*`, `RING_*`, `W`):
   extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
+  The constants are in 100 % units: `Config.hud_scale` resizes the window (`apply_scale`) and
+  `paintEvent` scales the painter, so never multiply layout values by the scale yourself.
 - Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the
   user's request. Tyre data lives in the info panel.
 - **Settings:** add a field to the `Config` dataclass (`config.py`) and a widget in `SettingsDialog`.

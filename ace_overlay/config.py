@@ -25,6 +25,7 @@ class Config:
     flash_color: str = "#4d7cff"
     show_panel: bool = True  # the separate info panel (timing, fuel, pressures, car settings)
     hide_until_driving: bool = False  # HUD only appears once the car is out of the garage
+    hud_scale: int = 100  # % size of the HUD
 
     @classmethod
     def load(cls, settings):
@@ -98,7 +99,14 @@ class SettingsDialog(QDialog):
         self.hide_until_driving = QCheckBox("Only show the HUD while driving (hidden in menus, the garage, replays and pause)")
         self.show_panel = QCheckBox("Show the info panel (timing, fuel, tyre pressures, car settings)")
         panel_box = QGroupBox("Windows")
+        self.hud_scale = QSpinBox(minimum=50, maximum=250, singleStep=10, suffix=" %")
+        self.hud_scale.setToolTip("Size of the HUD. It's drawn as shapes and text, so it stays sharp at any size.")
+        scale_row = QWidget()
+        scale_layout = QFormLayout(scale_row)
+        scale_layout.setContentsMargins(0, 0, 0, 0)
+        scale_layout.addRow("HUD scale", self.hud_scale)
         windows_layout = QVBoxLayout(panel_box)
+        windows_layout.addWidget(scale_row)
         windows_layout.addWidget(self.hide_until_driving)
         windows_layout.addWidget(self.show_panel)
 
@@ -119,6 +127,7 @@ class SettingsDialog(QDialog):
             button.changed.connect(self.apply)
         self.show_panel.toggled.connect(self.apply)
         self.hide_until_driving.toggled.connect(self.apply)
+        self.hud_scale.valueChanged.connect(self.apply)
 
     @staticmethod
     def row(spin, color_button):
@@ -139,6 +148,7 @@ class SettingsDialog(QDialog):
             getattr(self, name).set_color(getattr(c, name))
         self.show_panel.setChecked(c.show_panel)
         self.hide_until_driving.setChecked(c.hide_until_driving)
+        self.hud_scale.setValue(c.hud_scale)
         self.rpm_flash.setMinimum(c.rpm_start + 1)
         self._loading = False
 
@@ -155,6 +165,7 @@ class SettingsDialog(QDialog):
             setattr(c, name, getattr(self, name).color)
         c.show_panel = self.show_panel.isChecked()
         c.hide_until_driving = self.hide_until_driving.isChecked()
+        c.hud_scale = self.hud_scale.value()
         c.save(self.overlay.settings)
         self.overlay.config_changed.emit()
 

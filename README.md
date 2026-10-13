@@ -155,6 +155,7 @@ The pin and gear fade out while you drive and light up when you hover over them.
 | Colour 2 from / Colour 3 from | 86 % / 92 % | Where each light switches colour. Every light takes the colour of the RPM % it represents. |
 | Flash at | 97 % | RPM where the whole strip flashes. |
 | Colours | green / yellow / red / blue | One swatch per zone plus the flash colour. |
+| HUD scale | 100 % | Size of the HUD, 50–250 %. It's drawn as shapes and text, so it stays sharp at any size. |
 | Only show the HUD while driving | off | Hides the HUD in menus, the garage or pit box, replays and pause, and shows it once you leave the pit box (the pit lane counts as driving). The info panel isn't affected. While the HUD is hidden, use the tray icon for *Move overlays* (which shows it for positioning) and *Settings…*. |
 | Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
 

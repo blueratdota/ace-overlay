@@ -238,6 +238,10 @@ class OverlayWindow(QWidget):
         for button in self.side_buttons:
             button.follow()
 
+    def resizeEvent(self, _event):  # e.g. the HUD scale changed: keep the buttons beside the window
+        for button in self.side_buttons:
+            button.follow()
+
     def mousePressEvent(self, event):
         if not self.locked and event.button() == Qt.LeftButton:
             self.windowHandle().startSystemMove()
@@ -263,6 +267,8 @@ class InputsOverlay(OverlayWindow):
         super().__init__(settings, "pos", QPoint(60, 60), W, H)
         self.source = source
         self.config = Config.load(settings)
+        self.apply_scale()
+        self.config_changed.connect(self.apply_scale)
         self.config_changed.connect(self.update)
         self.settings_dialog = None
         self.frame = self.graphics = None
@@ -315,6 +321,16 @@ class InputsOverlay(OverlayWindow):
         self.blink = (self.blink + 1) % 16
         self.update()
 
+    def scale(self):
+        return self.config.hud_scale / 100
+
+    def apply_scale(self):
+        """Size the window for the HUD scale. Drawing stays in unscaled layout units (see paintEvent)."""
+        s = self.scale()
+        size = (round(W * s), round(H * s))
+        if (self.width(), self.height()) != size:
+            self.setFixedSize(*size)
+
     def update_visibility(self, now):
         """With "only while driving" on, the HUD hides in menus, the garage, replays and pause. A short
         delay stops it flickering on transitions, and it always shows while unpinned for positioning."""
@@ -328,6 +344,7 @@ class InputsOverlay(OverlayWindow):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        p.scale(self.scale(), self.scale())  # every layout constant below is in 100 % units
         self.paint_background(p, QRectF(0, 0, W, PH), R, PILL_BG, EDGE)
 
         f = self.frame
