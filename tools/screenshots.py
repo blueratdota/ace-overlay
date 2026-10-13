@@ -182,6 +182,43 @@ def main():
     save_png(dialog.grab().toImage(), "settings.png")
     dialog.close()
 
+    # A hybrid: battery ring and the flow bar, deploying on the straight and recovering under braking.
+    hybrid = InputsOverlay(HybridDemo(), settings)
+    hybrid.timer.stop()
+    for _ in range(int(20 / TICK)):
+        clock.t += TICK
+        hybrid.tick()
+
+    def hybrid_still(predicate, name):
+        while not predicate():
+            clock.t += TICK
+            hybrid.tick()
+        hybrid.blink = 0
+        save_png(render(hybrid, 2), name)
+
+    def hybrid_lap_time():  # this demo source started later than the first one
+        return (clock.t - hybrid.source._start) % 10.0
+
+    hybrid_still(lambda: 3.0 < hybrid_lap_time() < 3.05, "hybrid-deploy.png")
+    hybrid_still(lambda: 6.2 < hybrid_lap_time() < 6.25, "hybrid-recover.png")
+
+
+class HybridDemo(DemoSource):
+    """Demo telemetry for a hybrid, behaving like the Ferrari SF25 measured live: the battery deploys
+    on throttle, recovers under braking and gently while coasting."""
+
+    def __init__(self):
+        super().__init__()
+        self.charge = 0.75
+
+    def read(self):
+        p = super().read()
+        flow = 0.9 * p.gas if p.gas > 0.1 else -(0.8 * p.brake + 0.2)
+        self.charge = max(0.0, min(1.0, self.charge - flow * (0.0003 if flow > 0 else 0.001)))
+        g = self.graphics
+        g.has_kers, g.kers_charge_perc, g.kers_current_perc = True, self.charge, flow
+        return p
+
 
 if __name__ == "__main__":
     main()
