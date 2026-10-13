@@ -26,7 +26,7 @@
 - **Gear and pedal ring.** A ring at the left end of the pill, with the gear and speed inside it.
   Throttle fills three quarters of it in green, clockwise from the top-left, and brake fills the left
   quarter in red.
-- **Shift lights.** A row of 15 dots with configurable colour zones and flash point. They're also
+- **Shift lights.** A row of 26 dots along the top edge, with configurable colour zones and flash point. They're also
   the RPM readout.
 - **Position.** Shows as "P19" (with "of 20" underneath) whenever the game ranks the session.
 - **Real-time input trace.** Scrolling throttle, brake and clutch history. The right edge is always

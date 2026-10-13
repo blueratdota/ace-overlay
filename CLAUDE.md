@@ -70,7 +70,9 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   ABS; left end = car's left wheels, right end = right wheels, via `slipping_sides()`). The gear ring
   is concentric with the left end. Throttle fills 3/4 clockwise from the top-left (135°) and brake the
   west quarter, with the gear and speed inside it. Then come the dot shift lights (the only RPM display;
-  there's no RPM number) over the trace, which starts at `CX0`, then the position. A chip (track °C, air °C, current lap) hangs over the bottom edge. The layout is
+  there's no RPM number; 26 dots along the top edge) over the trace, which starts at `CX0` and fills
+  the height down to the chip, then the position. A chip (track °C, air °C, current lap) hangs below
+  the bottom edge, overlapping it by `CHIP_OVERLAP`. The layout is
   constant-driven at the top of `overlay.py` (`PH`, `R`, `RING_*`, `CX0`, `TRACE_*`, `POS_*`, `W`):
   extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
 - Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the

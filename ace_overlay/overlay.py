@@ -26,21 +26,23 @@ DIM = QColor(255, 255, 255, 110)
 
 # The pill. Its rounded ends carry the TC / ABS arcs (left end = car's left wheels, right end = right
 # wheels; upper quarter TC, lower quarter ABS). The gear ring (with the speed) sits inside the left end;
-# then the dot shift lights over the trace, then the position. The chip hangs off the bottom edge.
-PH = 112  # pill height
+# then the dot shift lights along the top edge over the trace, then the position. The chip hangs below
+# the bottom edge.
+PH = 100  # pill height
 R = PH // 2  # end radius
-CHIP_H = 26
-H = PH + CHIP_H // 2 + 2
+CHIP_H, CHIP_OVERLAP = 24, 6  # the chip only tucks this far up into the pill
+H = PH + CHIP_H - CHIP_OVERLAP + 1
 ARC_R, ARC_W = R - 5, 3.5  # TC / ABS end arcs: radius (to stroke centre) and stroke
-RING_CX, RING_CY, RING_R, RING_W = R, R, 42, 7  # gear ring, concentric with the left end
-CX0 = RING_CX + RING_R + 18  # start of the middle section
-DOT_Y, DOT_D = 20, 9  # shift-light row centre and dot diameter
-TRACE_X, TRACE_Y, TRACE_W, TRACE_H = CX0, 36, 360, 52  # the time window is Config.trace_seconds
+RING_CX, RING_CY, RING_R, RING_W = R, R, 37, 6  # gear ring, concentric with the left end
+CX0 = RING_CX + RING_R + 16  # start of the middle section
+DOT_Y, DOT_D = 9, 8  # shift-light row centre (close to the top edge) and dot diameter
+TRACE_X, TRACE_Y, TRACE_W = CX0, 20, 360  # the time window is Config.trace_seconds
+TRACE_H = PH - CHIP_OVERLAP - 4 - TRACE_Y  # down to just above the chip
 POS_X, POS_W = TRACE_X + TRACE_W + 12, 80
 W = POS_X + POS_W + R - 20  # the position runs a little way into the right end's curve
 CHIP_CX = TRACE_X + TRACE_W / 2  # chip centred under the trace
 
-SHIFT_LEDS = 15  # thresholds and colours come from Config
+SHIFT_LEDS = 26  # thresholds and colours come from Config
 AID_HOLD_S = 0.15  # keep a TC/ABS light flashing briefly so single-step triggers are visible
 SIDE_SLIP_SHARE = 0.7  # a side lights if its wheel slip is at least this share of the worst side
 HIDE_DELAY_S = 2.0  # "only while driving": stay up this long after driving stops, to avoid flicker
@@ -359,15 +361,15 @@ class InputsOverlay(OverlayWindow):
                 p.setPen(QPen(color, RING_W, Qt.SolidLine, Qt.FlatCap))
                 p.drawArc(box, int(start * 16), int(span * value * 16))
         gear = "R" if f.gear == 0 else "N" if f.gear == 1 else str(f.gear - 1)
-        cx, cy, w = RING_CX, RING_CY, 60
+        cx, cy, w = RING_CX, RING_CY, 56
         p.setPen(TEXT)
-        p.setFont(font(22, QFont.Bold))
-        p.drawText(QRectF(cx - w / 2, cy - 30, w, 34), Qt.AlignHCenter | Qt.AlignBottom, gear)
-        p.setFont(font(13, QFont.Bold))
-        p.drawText(QRectF(cx - w / 2, cy + 4, w, 18), Qt.AlignCenter, f"{f.speedKmh:.0f}")
+        p.setFont(font(19, QFont.Bold))
+        p.drawText(QRectF(cx - w / 2, cy - 28, w, 30), Qt.AlignHCenter | Qt.AlignBottom, gear)
+        p.setFont(font(12, QFont.Bold))
+        p.drawText(QRectF(cx - w / 2, cy + 2, w, 16), Qt.AlignCenter, f"{f.speedKmh:.0f}")
         p.setPen(DIM)
-        p.setFont(font(6.5))
-        p.drawText(QRectF(cx - w / 2, cy + 21, w, 10), Qt.AlignCenter, "KPH")
+        p.setFont(font(6))
+        p.drawText(QRectF(cx - w / 2, cy + 17, w, 9), Qt.AlignCenter, "KPH")
 
     def draw_dots(self, p, f):
         """Shift lights as dots, spread evenly from rpm_start to rpm_flash; each takes the colour of
@@ -430,14 +432,14 @@ class InputsOverlay(OverlayWindow):
         pos = g.current_pos if g is not None else 0
         p.setPen(ORANGE if pos else DIM)
         p.setFont(font(24, QFont.Bold))
-        p.drawText(QRectF(POS_X, 26, POS_W, 40), Qt.AlignRight | Qt.AlignVCenter, f"P{pos}" if pos else "P–")
+        p.drawText(QRectF(POS_X, R - 28, POS_W, 36), Qt.AlignRight | Qt.AlignVCenter, f"P{pos}" if pos else "P–")
         if pos and g.total_drivers:
             p.setPen(DIM)
             p.setFont(font(8))
-            p.drawText(QRectF(POS_X, 64, POS_W, 14), Qt.AlignRight | Qt.AlignVCenter, f"OF {g.total_drivers}")
+            p.drawText(QRectF(POS_X, R + 6, POS_W, 14), Qt.AlignRight | Qt.AlignVCenter, f"OF {g.total_drivers}")
 
     def draw_chip(self, p, f):
-        """Track temperature · air temperature · current lap, in a chip over the pill's bottom edge."""
+        """Track temperature · air temperature · current lap, in a chip hanging below the pill."""
         g = self.graphics
         air, road = air_temp(f, g), track_temp(f)
         items = [(icon_road, f"{road:.0f} °C" if road is not None else "–"),
@@ -448,7 +450,7 @@ class InputsOverlay(OverlayWindow):
         icon, gap, pad, spacing = 12, 5, 12, 16
         widths = [icon + gap + metrics.horizontalAdvance(text) for _, text in items]
         chip_w = sum(widths) + spacing * (len(items) - 1) + 2 * pad
-        chip = QRectF(CHIP_CX - chip_w / 2, PH - CHIP_H / 2, chip_w, CHIP_H)
+        chip = QRectF(CHIP_CX - chip_w / 2, PH - CHIP_OVERLAP, chip_w, CHIP_H)
         p.setPen(QPen(EDGE, 1))
         p.setBrush(QColor(28, 28, 34, 240))
         p.drawRoundedRect(chip, CHIP_H / 2, CHIP_H / 2)
