@@ -574,9 +574,9 @@ def icon_wind(p, r):
         p.drawArc(QRectF(end - 4, y - 2.5, 3, 2.5), -90 * 16, 270 * 16)
 
 
-def icon_stopwatch(p, r):
+def icon_stopwatch(p, r, color=DIM):
     """Watch face with a crown and a hand."""
-    p.setPen(QPen(DIM, 1.4, Qt.SolidLine, Qt.RoundCap))
+    p.setPen(QPen(color, 1.4, Qt.SolidLine, Qt.RoundCap))
     p.setBrush(Qt.NoBrush)
     face = QRectF(r.left() + 1, r.top() + 2.5, r.width() - 2, r.height() - 2.5)
     p.drawEllipse(face)

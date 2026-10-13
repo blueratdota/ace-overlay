@@ -22,10 +22,13 @@ from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 import ace_overlay.demo as demo_module  # noqa: E402
 import ace_overlay.overlay as overlay_module  # noqa: E402
+import ace_overlay.standings as standings_module  # noqa: E402
+import ace_overlay.standings_panel as standings_panel_module  # noqa: E402
 from ace_overlay.config import Config  # noqa: E402
 from ace_overlay.demo import DemoSource  # noqa: E402
 from ace_overlay.overlay import InputsOverlay, SideButton  # noqa: E402
 from ace_overlay.panel import InfoPanel  # noqa: E402
+from ace_overlay.standings_panel import StandingsPanel  # noqa: E402
 
 OUT = ROOT / "docs" / "images"
 TICK = 1 / 60
@@ -94,15 +97,18 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     app = QApplication(sys.argv)  # noqa: F841
     clock = Clock()
-    demo_module.time = overlay_module.time = clock
+    demo_module.time = overlay_module.time = standings_module.time = standings_panel_module.time = clock
 
     settings = QSettings(str(Path(tempfile.mkdtemp()) / "screenshots.ini"), QSettings.IniFormat)
     overlay = InputsOverlay(DemoSource(), settings)
     overlay.timer.stop()
+    standings = StandingsPanel(overlay.source, settings, Config(standings_rows=10))
+    standings.timer.stop()
 
     def step():
         clock.t += TICK
         overlay.tick()
+        standings.tick()
 
     def lap_time():
         return (clock.t - 1000.0) % 10.0
@@ -171,6 +177,10 @@ def main():
     run_until(lambda f: 5.0 < lap_time() < 5.1)
     panel.tick()
     save_png(render(panel, 2), "info-panel.png")
+
+    # The standings: by now the demo field has done a few laps (the first one learns the track).
+    standings.tick()
+    save_png(render(standings, 2), "standings.png")
 
     # Custom RPM colours + the settings window.
     overlay.config = Config(rpm_start=60, rpm_zone2=72, rpm_zone3=84, rpm_flash=95,

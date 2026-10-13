@@ -3,7 +3,7 @@
 <p align="center">
   <strong>A lightweight, real-time telemetry HUD for Assetto Corsa EVO.</strong><br>
   A compact dash with your pedals, gear, shift lights, input trace, TC/ABS and battery, plus an info
-  panel for timing, fuel and tyre pressures, drawn on top of the game.
+  panel for timing, fuel and tyre pressures and a live standings table, drawn on top of the game.
 </p>
 
 <p align="center">
@@ -84,7 +84,7 @@ the repository. It runs on GitHub's computers, not yours:
 3. Double-click **`ace-overlay.exe`**. It shows *Waiting for Assetto Corsa EVO…* until you're in a
    session. You can start it before or after the game.
 4. **Position it:** click the 📌 pin next to the HUD, drag the HUD where you want it, and click the
-   pin again to lock it. Do the same for the info panel.
+   pin again to lock it. Do the same for the info panel and the standings.
 5. **Adjust it:** click the ⚙️ gear under the pin for settings: HUD scale, shift-light colours,
    trace length, and showing the HUD only while driving.
 
@@ -132,8 +132,19 @@ update**, download a newer build and extract it over the same folder. Your setti
 - **Car:** brake bias, TC, ABS and engine map settings, air and track temperature, and gaps ahead
   and behind.
 
-**Out of the way:** always on top and click-through, so the mouse goes straight to the game. Pin both
-windows anywhere. It's portable: no installer, no game files touched, and settings are saved next to
+**The standings**, a third window:
+
+- **Running order** with the gap to the leader (to the fastest lap in practice and qualifying), plus
+  each car's fastest and last lap. The session's fastest lap is purple, cars in the pits get a PIT
+  tag, and your row is highlighted.
+- **Compact.** It lists everyone if they fit, otherwise the top 3 plus the cars around you.
+- **Worked out by the overlay.** AC EVO doesn't publish other drivers' names, cars, classes or lap
+  times, only where each car is. The overlay learns the track during your first lap (and remembers
+  it per track), then follows and times every car itself. So cars show as "Car 7", classes aren't
+  split, and a car's lap times appear once the overlay has seen it complete a lap.
+
+**Out of the way:** always on top and click-through, so the mouse goes straight to the game. Pin every
+window anywhere. It's portable: no installer, no game files touched, and settings are saved next to
 the program.
 
 ## Screenshots
@@ -181,6 +192,19 @@ the program.
   </tr>
   <tr>
     <td width="50%" align="center">
+      <img src="docs/images/standings.png" alt="Standings" width="380">
+    </td>
+    <td width="50%">
+      <p><b>Standings</b></p>
+      <sub>
+        <b>Race order</b> with the gap to the leader, plus every car's fastest and last lap.<br><br>
+        <b>Purple</b> marks the session's fastest lap, and your row is highlighted in gold.<br><br>
+        <b>Long fields</b> show the top 3, then the cars around you. Lapped cars show laps down ("2L"), and cars in the pits get a PIT tag.
+      </sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
       <img src="docs/images/info-panel.png" alt="Info panel" width="300">
     </td>
     <td width="50%">
@@ -199,9 +223,9 @@ the program.
 
 | Control | What it does |
 | --- | --- |
-| 📌 **Pin** (beside each window) | Click to unpin, drag the window into place, then click again to lock it. When it's locked, clicks pass through to the game. The HUD and the info panel each have their own pin, and positions are remembered. |
+| 📌 **Pin** (beside each window) | Click to unpin, drag the window into place, then click again to lock it. When it's locked, clicks pass through to the game. The HUD, the info panel and the standings each have their own pin, and positions are remembered. |
 | ⚙️ **Gear** (under the HUD's pin) | Opens the settings window. |
-| **Tray icon** | Right-click for *Move overlays* (unpins both windows), *Show info panel*, *Settings…* and *Quit*. |
+| **Tray icon** | Right-click for *Move overlays* (unpins every window), *Show info panel*, *Show standings*, *Settings…* and *Quit*. |
 
 The pin and gear fade out while you drive and light up when you hover over them.
 
@@ -217,6 +241,8 @@ The pin and gear fade out while you drive and light up when you hover over them.
 | HUD scale | 100 % | Size of the HUD, 50–250 %. |
 | Only show the HUD while driving | off | Hides the HUD in menus, the garage or pit box, replays and pause, and shows it once you leave the pit box. The info panel isn't affected. While the HUD is hidden, the tray icon still offers *Move overlays* and *Settings…*. |
 | Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
+| Show the standings | on | Shows or hides the standings (also in the tray menu). |
+| Standings rows | 12 | The most rows the standings show (5–40). With more cars than that, it shows the top 3 and the cars around you. |
 
 ## How it works
 
@@ -227,8 +253,8 @@ injects into the game.
 
 ```
              ┌─▶ Local\acevo_pmf_physics   pedals, gear, speed, RPM, ABS/TC, temperatures ─┐
-AC EVO ──────┤                                                                            ├──▶ ace-overlay ──▶ HUD + info panel
-             └─▶ Local\acevo_pmf_graphics  position, laps, fuel, tyres, battery, ABS/TC ───┘
+AC EVO ──────┼─▶ Local\acevo_pmf_graphics  laps, fuel, tyres, battery, all cars' positions ┼──▶ ace-overlay ──▶ HUD + panels
+             └─▶ Local\acevo_pmf_static    session type, track ────────────────────────────┘
 ```
 
 ### Good to know
@@ -236,6 +262,10 @@ AC EVO ──────┤                                                    
 - **Verified against the live game.** Several documented fields turned out to be unused by AC EVO,
   so every value shown was checked while driving (Golf 8 R, BMW M3 E46 CSL, Dallara EXP, Ferrari SF25).
 - **Tyre wear isn't shown.** AC EVO doesn't publish it.
+- **Standings are worked out, not read.** The game only says where each car is. Gaps and lap times
+  are measured by the overlay from when it first sees a car, and laps are counted from your own, so
+  start the overlay before a race starts: a car that was already lapped before then is shown up to
+  a lap too high. The first time on a track it needs one lap of yours to learn the track.
 - **The TC/ABS side is inferred.** The game only reports TC and ABS as on/off for the whole car. The
   overlay picks the side from per-wheel slip, and lights both sides when they're close.
 - **Early access.** Kunos can change the telemetry between patches. If values look wrong after an
@@ -274,16 +304,18 @@ the zip to a GitHub Release.
 
 ```
 ace_overlay/
-├── shm.py        # read-only shared-memory reader, physics + graphics structs
+├── shm.py        # read-only shared-memory reader, physics / graphics / static structs
 ├── overlay.py    # the HUD, the shared pinnable window, pin and settings buttons
 ├── panel.py      # the info panel
+├── standings.py  # standings model: learns the track, follows and times every car
+├── standings_panel.py  # the standings window
 ├── tyres.py      # tyre-pressure model: learns each compound's ideal windows
 ├── config.py     # user settings and the settings window
 ├── demo.py       # simulated telemetry lap
 └── app.py        # entry point: CLI flags, tray icon, portable-mode settings
 packaging/        # PyInstaller launcher and files shipped in the zip
-tools/            # screenshot / GIF generator
-tests/            # struct layout, tyre model and helper tests
+tools/            # screenshot / GIF generator, shared-memory probe
+tests/            # struct layout, tyre model, standings and helper tests
 build.py          # portable package builder
 .github/          # automatic build workflow
 ```

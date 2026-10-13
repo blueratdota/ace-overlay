@@ -15,6 +15,7 @@ from ctypes import wintypes
 
 PHYSICS_TAG = "Local\\acevo_pmf_physics"
 GRAPHICS_TAG = "Local\\acevo_pmf_graphics"
+STATIC_TAG = "Local\\acevo_pmf_static"
 STATUS_LIVE = 2  # graphics.status while in a session: both in the pit box and on track (verified live)
 
 _f = ctypes.c_float
@@ -334,6 +335,39 @@ class Graphics(ctypes.Structure):
     ]
 
 
+class Static(ctypes.Structure):
+    """SPageFileStaticEvo: session and track, set once per session. session_name ("Practice") and
+    track ("Circuit de Spa Francorchamps") decode at offsets 36 / 136 in the live game."""
+
+    _pack_ = 4
+    _fields_ = [
+        ("sm_version", ctypes.c_char * 15),
+        ("ac_evo_version", ctypes.c_char * 15),
+        ("session", _i),
+        ("session_name", _c33),
+        ("event_id", ctypes.c_uint8),
+        ("session_id", ctypes.c_uint8),
+        ("starting_grip", _i),
+        ("starting_ambient_temperature_c", _f),
+        ("starting_ground_temperature_c", _f),
+        ("is_static_weather", _b),
+        ("is_timed_race", _b),
+        ("is_online", _b),
+        ("number_of_sessions", _i),
+        ("nation", _c33),
+        ("longitude", _f),
+        ("latitude", _f),
+        ("track", _c33),
+        ("track_configuration", _c33),
+        ("track_length_m", _f),
+    ]
+
+
+def text(chars):
+    """A char[] field as str. They're NUL-terminated, sometimes with leftovers after the NUL."""
+    return bytes(chars).split(b"\0")[0].decode(errors="replace")
+
+
 _FILE_MAP_READ = 0x0004
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _kernel32.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
@@ -423,27 +457,30 @@ class LiveSource:
     def __init__(self):
         self._physics = SharedBlock(PHYSICS_TAG, Physics)
         self._graphics = SharedBlock(GRAPHICS_TAG, Graphics)
+        self._static = SharedBlock(STATIC_TAG, Static)
         self._last_packet = None
         self._last_change = time.monotonic()
         self.graphics = None  # the Graphics snapshot taken with the last read(), for the info panel
+        self.static = None  # likewise the Static block (session name, track), for the standings
 
     def read(self):
         frame = self._physics.read()
         if frame is None:
-            self.graphics = None
+            self.graphics = self.static = None
             return None
         now = time.monotonic()
         if frame.packetId != self._last_packet:
             self._last_packet = frame.packetId
             self._last_change = now
         elif now - self._last_change > self.STALE_AFTER_S:
-            self._physics.close()
-            self._graphics.close()
+            for block in (self._physics, self._graphics, self._static):
+                block.close()
             self._last_change = now
 
         frame.absInAction = int(bool(frame.absInAction or frame.abs > 0))
         frame.tcInAction = int(bool(frame.tcInAction or frame.tc > 0))
         graphics = self.graphics = self._graphics.read()
+        self.static = self._static.read()
         if graphics is not None:
             frame.absInAction |= graphics.abs_active
             frame.tcInAction |= graphics.tc_active

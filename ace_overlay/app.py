@@ -95,6 +95,7 @@ def main():
 
     from .overlay import InputsOverlay
     from .panel import InfoPanel
+    from .standings_panel import StandingsPanel
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # let Ctrl+C in the console quit
     app = QApplication(sys.argv)
@@ -107,10 +108,12 @@ def main():
     overlay.show()
     panel = InfoPanel(source, settings, overlay.config)
     panel.setVisible(overlay.config.show_panel)
-    windows = (overlay, panel)
+    standings = StandingsPanel(source, settings, overlay.config)
+    standings.setVisible(overlay.config.show_standings)
+    windows = (overlay, panel, standings)
 
     menu = QMenu()
-    # "Move overlays" unpins/pins both windows; each window's own pin still works on its own.
+    # "Move overlays" unpins/pins every window; each window's own pin still works on its own.
     move_action = QAction("Move overlays", menu, checkable=True)
     moving_all = False
 
@@ -129,21 +132,27 @@ def main():
     for w in windows:
         w.locked_changed.connect(sync_move_action)
     menu.addAction(move_action)
-    panel_action = QAction("Show info panel", menu, checkable=True, checked=overlay.config.show_panel)
-    menu.addAction(panel_action)
+
+    def visibility_toggle(window, field, label):
+        """A tray checkbox for a window, kept in step with its Config field (and the settings window)."""
+        action = QAction(label, menu, checkable=True, checked=getattr(overlay.config, field))
+        menu.addAction(action)
+
+        def set_visible(on):
+            if getattr(overlay.config, field) != on:  # from the tray: save it like the settings window does
+                setattr(overlay.config, field, on)
+                overlay.config.save(settings)
+                if overlay.settings_dialog:
+                    overlay.settings_dialog.load(overlay.config)
+            window.setVisible(on)
+            action.setChecked(on)
+
+        action.toggled.connect(set_visible)
+        overlay.config_changed.connect(lambda: set_visible(getattr(overlay.config, field)))
+
+    visibility_toggle(panel, "show_panel", "Show info panel")
+    visibility_toggle(standings, "show_standings", "Show standings")
     menu.addAction("Settings…", overlay.open_settings)
-
-    def set_panel_visible(on):
-        if overlay.config.show_panel != on:  # from the tray: save it like the settings window does
-            overlay.config.show_panel = on
-            overlay.config.save(settings)
-            if overlay.settings_dialog:
-                overlay.settings_dialog.load(overlay.config)
-        panel.setVisible(on)
-        panel_action.setChecked(on)
-
-    panel_action.toggled.connect(set_panel_visible)
-    overlay.config_changed.connect(lambda: set_panel_visible(overlay.config.show_panel))
     menu.addSeparator()
     menu.addAction("Quit", app.quit)
 

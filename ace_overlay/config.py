@@ -26,6 +26,8 @@ class Config:
     show_panel: bool = True  # the separate info panel (timing, fuel, pressures, car settings)
     hide_until_driving: bool = False  # HUD only appears once the car is out of the garage
     hud_scale: int = 100  # % size of the HUD
+    show_standings: bool = True  # the separate standings window
+    standings_rows: int = 12  # rows it shows at most: the leaders, then the cars around the player
 
     @classmethod
     def load(cls, settings):
@@ -105,10 +107,15 @@ class SettingsDialog(QDialog):
         scale_layout = QFormLayout(scale_row)
         scale_layout.setContentsMargins(0, 0, 0, 0)
         scale_layout.addRow("HUD scale", self.hud_scale)
+        self.show_standings = QCheckBox("Show the standings (running order, gaps and lap times)")
+        self.standings_rows = QSpinBox(minimum=5, maximum=40)
+        self.standings_rows.setToolTip("With more cars than this, the standings show the top 3 and the cars around you.")
+        scale_layout.addRow("Standings rows", self.standings_rows)
         windows_layout = QVBoxLayout(panel_box)
         windows_layout.addWidget(scale_row)
         windows_layout.addWidget(self.hide_until_driving)
         windows_layout.addWidget(self.show_panel)
+        windows_layout.addWidget(self.show_standings)
 
         buttons = QDialogButtonBox(QDialogButtonBox.RestoreDefaults | QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
@@ -128,6 +135,8 @@ class SettingsDialog(QDialog):
         self.show_panel.toggled.connect(self.apply)
         self.hide_until_driving.toggled.connect(self.apply)
         self.hud_scale.valueChanged.connect(self.apply)
+        self.show_standings.toggled.connect(self.apply)
+        self.standings_rows.valueChanged.connect(self.apply)
 
     @staticmethod
     def row(spin, color_button):
@@ -149,6 +158,8 @@ class SettingsDialog(QDialog):
         self.show_panel.setChecked(c.show_panel)
         self.hide_until_driving.setChecked(c.hide_until_driving)
         self.hud_scale.setValue(c.hud_scale)
+        self.show_standings.setChecked(c.show_standings)
+        self.standings_rows.setValue(c.standings_rows)
         self.rpm_flash.setMinimum(c.rpm_start + 1)
         self._loading = False
 
@@ -166,6 +177,8 @@ class SettingsDialog(QDialog):
         c.show_panel = self.show_panel.isChecked()
         c.hide_until_driving = self.hide_until_driving.isChecked()
         c.hud_scale = self.hud_scale.value()
+        c.show_standings = self.show_standings.isChecked()
+        c.standings_rows = self.standings_rows.value()
         c.save(self.overlay.settings)
         self.overlay.config_changed.emit()
 

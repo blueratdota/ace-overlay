@@ -11,6 +11,7 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 .venv\Scripts\python -m ace_overlay --dump                 # print live fields to compare with the in-game HUD
 .venv\Scripts\python -m unittest discover -s tests         # unittest, not pytest
 .venv\Scripts\python tools\screenshots.py                  # regenerate docs/images (README)
+.venv\Scripts\python tools\probe_standings.py [seconds]    # dump every shared-memory byte in a session + report
 .venv\Scripts\python build.py                              # dist/ace-overlay-<version>-win64.zip
 ```
 
@@ -29,7 +30,8 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - **The graphics block feeds the info panel** (`panel.py`): fuel (`fuel_liter_per_lap`,
   `laps_possible_with_fuel`), lap times, `delta_time_ms`/`predicted_lap_time_ms` (0 in the pits),
   `session_state.time_left_ms`/`total_lap` (0 = timed session), `electronics` (TC/ABS/map levels,
-  brake bias), and gaps. All verified live. `current_pos` is 0 in practice.
+  brake bias), and gaps. All verified live. `current_pos` is 0 in practice until you set a lap (then it's P20 of 21, so
+  presumably ranked by best lap).
 - **Tyre pressure follows bulk temperature exactly:** psi = garage psi + 0.096 × (`TyreState.temperature_c`
   − 40 °C), with R² = 1.000 on all tyres. `temperature_c` equals physics `tyreCoreTemperature`.
   There's no target pressure. The normalised values are exactly 1.0 inside a per-compound ideal
@@ -52,6 +54,21 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   full throttle), negative while recovering (−0.80 under braking). Physics `kersCharge`, `kersInput`
   and `kersCurrentKJ` are **always 0**. `current_bhp` / `current_torque` are live (SF25 peaked at
   943 hp / 572 Nm).
+- **No per-car names, cars, classes or lap times exist anywhere** (`tools/probe_standings.py` dumped
+  every mapped byte of all three blocks in a 21-car session at Spa, 2026-10-13: the only text is
+  the player's own, the 3.3 KB past `Graphics` is zero, and `timing_state` starts with the player's
+  lap time as text). Per car there's only `car_ids[k]` (stable 128-bit id; index 0 was the player,
+  matching `player_car_id`) and `car_coordinates[k]` (metres, **y up**), for `k < active_cars`.
+  `graphics.npos` is the player's lap fraction. So `standings.py` derives everything:
+  - It learns the racing line (npos → x/z) from the player's driving, and saves it per track in
+    settings under `tracks/<track_layout>/line`.
+  - It projects each car onto the line, counts its laps (relative to the player at first sight),
+    and times it at `CHECKPOINTS` per lap.
+  - Live at Spa, AI cars projected within 0.1–4.4 m of the learned line.
+- **Static block** (`Local\acevo_pmf_static`, `shm.Static`): `session_name` ("Practice"),
+  `track` ("Circuit de Spa Francorchamps"), `track_configuration` ("GP") and `track_length_m`
+  (7004) all decode correctly. The standings treat a session whose name contains "race" as a race
+  (ordered by progress), and every other session by best lap.
 - **Always log `graphics.car_model` in live probes.** The user switches cars between sessions, and
   findings must be attributed to the right car.
 - **TC is unverified.** No TC signal fired in a 4-minute recording, possibly because TC never cut in.
@@ -89,6 +106,12 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
   extend that chain, not hard-coded coordinates. Fonts go through `font()` (Bahnschrift, then Segoe UI).
   The constants are in 100 % units: `Config.hud_scale` resizes the window (`apply_scale`) and
   `paintEvent` scales the painter, so never multiply layout values by the scale yourself.
+- **Standings window** (`standings_panel.py`): ticks at 20 Hz even while hidden, so lap counts
+  survive toggling it. The layout is constant-driven at the top of the file (`ROW_H`, column `*_X` /
+  `*_W`). Rows come from `visible_rows()`: everything if it fits `Config.standings_rows`, otherwise the
+  top 3 plus a window around the player, with `GROUP_GAP` between the two. The demo fakes a 16-car
+  race on a 600 m oval (`DEMO_FIELD`, `demo_track`). `DemoSource.time_scale` makes its 10 s laps read
+  as 1:32.
 - Tyre temperatures, pedal bars and the boost bar were dropped from the HUD in the redesign at the
   user's request. Tyre data lives in the info panel.
 - **Settings:** add a field to the `Config` dataclass (`config.py`) and a widget in `SettingsDialog`.

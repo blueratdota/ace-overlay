@@ -3,8 +3,8 @@ import unittest
 
 from types import SimpleNamespace
 
-from ace_overlay.shm import (STATUS_LIVE, Electronics, Graphics, Physics, SessionState, TyreState, air_temp,
-                             is_driving, track_temp)
+from ace_overlay.shm import (STATUS_LIVE, Electronics, Graphics, Physics, SessionState, Static, TyreState, air_temp,
+                             is_driving, text, track_temp)
 
 
 class PhysicsLayoutTest(unittest.TestCase):
@@ -52,6 +52,23 @@ class GraphicsLayoutTest(unittest.TestCase):
         self.assertEqual(Electronics.brake_bias.offset, 8)
         self.assertEqual(SessionState.time_left_ms.offset, 48)
         self.assertEqual(SessionState.total_lap.offset, 68)
+
+
+class StaticLayoutTest(unittest.TestCase):
+    """session_name, track, layout and length decoded correctly from the live game (Spa, 2026-10-13)."""
+
+    def test_offsets(self):
+        expected = {"session_name": 36, "session_id": 70, "track": 136, "track_configuration": 169,
+                    "track_length_m": 204}
+        for name, offset in expected.items():
+            with self.subTest(field=name):
+                self.assertEqual(getattr(Static, name).offset, offset)
+
+    def test_text_stops_at_the_nul(self):
+        s = Static()
+        s.track = b"Monza"
+        ctypes.memmove(ctypes.addressof(s) + Static.track.offset + 6, b"junk", 4)
+        self.assertEqual(text(s.track), "Monza")
 
 
 class DrivingTest(unittest.TestCase):

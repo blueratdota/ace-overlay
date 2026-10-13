@@ -3,7 +3,7 @@
 import math
 import time
 
-from .shm import STATUS_LIVE, Graphics, Physics
+from .shm import STATUS_LIVE, Graphics, Physics, Static
 from .tyres import GARAGE_C, PSI_PER_C
 
 MAX_RPM = 8000
@@ -16,6 +16,18 @@ DEMO_LAP_MS = 92_000  # the info panel reports each 10 s demo lap as a 1:32 lap
 DEMO_COLD_PSI = (26.0, 26.2, 24.6, 29.4)  # FL, FR, RL, RR garage pressures: fronts right, rears one low / one high
 DEMO_WINDOW_PSI = (27.0, 31.0)  # ideal pressure window; normalised = 1.0 inside, ±1/3 per psi outside
 DEMO_WINDOW_C = (60.0, 95.0)  # ideal temperature window (surface ±1/30 per °C, core ±1/20 per °C outside)
+# The rest of the field for the standings: (laps ahead of the player, lap time / the player's). The
+# player runs P3. The last car sits in the pit lane.
+DEMO_FIELD = ((0.061, 0.999), (0.024, 1.000), (-0.009, 1.001), (-0.019, 0.999), (-0.034, 1.002),
+              (-0.052, 1.001), (-0.07, 1.003), (-0.083, 1.002), (-0.11, 1.004), (-0.13, 1.003),
+              (-0.16, 1.005), (-0.19, 1.004), (-0.24, 1.006), (-0.31, 1.008))
+DEMO_PIT = (0.02, 0.7)  # pit car: lap fraction it's parked at, and how far towards the infield
+
+
+def demo_track(frac):
+    """World (x, z) in metres of a ~600 m oval, at lap fraction `frac`."""
+    angle = 2 * math.pi * frac
+    return 120 * math.cos(angle), 60 * math.sin(angle) + 15 * math.sin(2 * angle)
 
 
 def normalised(value, window, scale):
@@ -48,6 +60,9 @@ class DemoSource:
         self._temps = [[40.0, 40.0, 40.0] for _ in range(4)]
         self._bulk = [40.0] * 4
         self.graphics = None  # Graphics snapshot from the last read(), like LiveSource
+        self.static = Static()
+        self.static.session_name, self.static.track, self.static.track_length_m = b"Race", b"Demo Ring", 600.0
+        self.time_scale = DEMO_LAP_MS / 10_000  # the standings report each 10 s demo lap as 1:32
 
     def read(self):
         now = time.monotonic()
@@ -124,6 +139,17 @@ class DemoSource:
         g.session_state.time_left_ms = max(0, int(25 * 60_000 - elapsed * DEMO_LAP_MS / 10))
         g.current_pos, g.total_drivers = 3, 16
         g.gap_ahead, g.gap_behind = 1.2 + 0.3 * math.sin(elapsed / 7), -(0.8 + 0.2 * math.cos(elapsed / 5))
+        g.driver_name, g.driver_surname = b"Demo", b"Driver"
+        fracs = [g.npos] + [(ahead + elapsed / (10 * pace) + 0.003 * math.sin(elapsed / 4 + k)) % 1.0
+                            for k, (ahead, pace) in enumerate(DEMO_FIELD)]
+        cars = [demo_track(frac) for frac in fracs]
+        x, z = demo_track(DEMO_PIT[0])
+        cars.append((x * DEMO_PIT[1], z * DEMO_PIT[1]))
+        for k, (x, z) in enumerate(cars):
+            g.car_ids[k][0], g.car_ids[k][1] = 0x5EED0000 + k, 0xD3110
+            g.car_coordinates[k][0], g.car_coordinates[k][2] = x, z
+        g.active_cars = len(cars)
+        g.player_car_id[0], g.player_car_id[1] = g.car_ids[0][0], g.car_ids[0][1]
 
         g.max_fuel = 55.0
         g.fuel_liter_per_lap = g.fuel_per_lap = 2.45
