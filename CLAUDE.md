@@ -64,7 +64,10 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
     settings under `tracks/<track_layout>/line`.
   - It projects each car onto the line, counts its laps (relative to the player at first sight),
     and times it at `CHECKPOINTS` per lap.
-  - Live at Spa, AI cars projected within 0.1–4.4 m of the learned line.
+  - Verified live at Spa: projecting the player's own car with the learned line matches `npos`
+    to a median of 0.13 m; measured player laps matched the game's within 10 ms (158.264 vs
+    158.268 s); AI cars sit 0.1–4.4 m from the line. The game updates `last_laptime_ms` about 0.1 s
+    after the crossing.
 - **Static block** (`Local\acevo_pmf_static`, `shm.Static`): `session_name` ("Practice"),
   `track` ("Circuit de Spa Francorchamps"), `track_configuration` ("GP") and `track_length_m`
   (7004) all decode correctly. The standings treat a session whose name contains "race" as a race
