@@ -6,7 +6,7 @@ from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter
 
 from .overlay import BRAKE, CLUTCH, DIM, TEXT, THROTTLE, TRACK, YELLOW, OverlayWindow, PinButton, lap_time
-from .shm import air_temp, track_temp
+from .shm import air_temp, player_position, track_temp
 from .tyres import EPS, TyreAdvisor
 
 PANEL_W, PANEL_H, PAD = 300, 364, 12
@@ -127,7 +127,8 @@ class InfoPanel(OverlayWindow):
         session = g.session_state
         lap = g.total_lap_count + 1
         laps = f"{lap}/{session.total_lap}" if session.total_lap > 0 else f"{lap}"
-        pos = f"{g.current_pos}/{g.total_drivers}" if g.current_pos > 0 else "–"
+        rank = player_position(g)
+        pos = f"{rank}/{g.total_drivers}" if rank else "–"
         left = clock(session.time_left_ms) if session.time_left_ms > 0 else "–"
         for i, (name, text) in enumerate((("LAP", laps), ("POS", pos), ("LEFT", left))):
             x = PAD + i * col

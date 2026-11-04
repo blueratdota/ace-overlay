@@ -5,9 +5,12 @@
 Needs PyInstaller in the environment (pip install pyinstaller).
 """
 
+import hashlib
 import shutil
 import tomllib
 from pathlib import Path
+from urllib.request import urlretrieve
+from zipfile import ZipFile
 
 import PyInstaller.__main__
 
@@ -15,6 +18,9 @@ ROOT = Path(__file__).parent
 BUILD = ROOT / "build"
 DIST = ROOT / "dist"
 NAME = "ace-overlay"
+LOADER_RELEASE = "https://github.com/dreasgrech/ACEUIAppLoader/releases/download/v0.27.0/"
+LOADER_ARCHIVE = "ACEUIAppLoader-0.27.0-0.9.1+release.6.zip"
+LOADER_SHA256 = "fa127567e3e49a55c5e1f97c3af64ce14ed78663fe80b4be7a2ba8c9486fe086"
 
 # Qt pieces PyInstaller bundles that a plain QPainter widget app never loads, relative to
 # _internal/PySide6. They come in as dependencies of optional plugins (virtual keyboard -> Quick/QML,
@@ -61,6 +67,22 @@ def prune(app_dir):
     print(f"Pruned {len(removed)} unused Qt files")
 
 
+def bundle_standings(app_dir):
+    archive = BUILD / LOADER_ARCHIVE
+    if not archive.exists():
+        download = archive.with_suffix(".download")
+        urlretrieve(LOADER_RELEASE + LOADER_ARCHIVE.replace("+", "%2B"), download)
+        download.replace(archive)
+    with archive.open("rb") as source:
+        if hashlib.file_digest(source, "sha256").hexdigest() != LOADER_SHA256:
+            raise RuntimeError(f"Unexpected checksum for {archive}")
+    with ZipFile(archive) as release:
+        member = "mods/ACEUIAppLoader.kspkg"
+        with release.open(member) as source, (app_dir / Path(member).name).open("wb") as dest:
+            shutil.copyfileobj(source, dest)
+    shutil.copytree(ROOT / "packaging" / "ace-standings-bridge", app_dir / "ace-standings-bridge")
+
+
 def main():
     version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     BUILD.mkdir(exist_ok=True)
@@ -88,8 +110,9 @@ def main():
 
     app_dir = DIST / NAME
     prune(app_dir)
-    for extra in ("README.txt", "Check telemetry.bat"):
+    for extra in ("README.txt", "Check telemetry.bat", "Setup standings.bat", "ACE UI App Loader LICENSE.txt"):
         shutil.copy(ROOT / "packaging" / extra, app_dir / extra)
+    bundle_standings(app_dir)
     shutil.copy(ROOT / "LICENSE", app_dir / "LICENSE.txt")
 
     # Zip the folder itself so users get a single "ace-overlay" folder when they extract.

@@ -105,11 +105,8 @@ def main():
     settings = (QSettings(str(APP_DIR / "settings.ini"), QSettings.IniFormat) if FROZEN
                 else QSettings("ace-overlay", "ace-overlay"))
     overlay = InputsOverlay(source, settings)
-    overlay.show()
     panel = InfoPanel(source, settings, overlay.config)
-    panel.setVisible(overlay.config.show_panel)
     standings = StandingsPanel(source, settings, overlay.config)
-    standings.setVisible(overlay.config.show_standings)
     windows = (overlay, panel, standings)
 
     menu = QMenu()
@@ -133,7 +130,7 @@ def main():
         w.locked_changed.connect(sync_move_action)
     menu.addAction(move_action)
 
-    def visibility_toggle(window, field, label):
+    def visibility_toggle(field, label, update_visibility):
         """A tray checkbox for a window, kept in step with its Config field (and the settings window)."""
         action = QAction(label, menu, checkable=True, checked=getattr(overlay.config, field))
         menu.addAction(action)
@@ -144,14 +141,16 @@ def main():
                 overlay.config.save(settings)
                 if overlay.settings_dialog:
                     overlay.settings_dialog.load(overlay.config)
-            window.setVisible(on)
+            update_visibility(on)
             action.setChecked(on)
 
         action.toggled.connect(set_visible)
         overlay.config_changed.connect(lambda: set_visible(getattr(overlay.config, field)))
+        set_visible(action.isChecked())
 
-    visibility_toggle(panel, "show_panel", "Show info panel")
-    visibility_toggle(standings, "show_standings", "Show standings")
+    visibility_toggle("show_hud", "Show inputs HUD", lambda _: overlay.update_visibility(time.monotonic()))
+    visibility_toggle("show_panel", "Show info panel", panel.setVisible)
+    visibility_toggle("show_standings", "Show standings", standings.setVisible)
     menu.addAction("Settings…", overlay.open_settings)
     menu.addSeparator()
     menu.addAction("Quit", app.quit)

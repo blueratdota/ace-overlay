@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 from .config import TRACE_MAX_SECONDS, Config, SettingsDialog
-from .shm import air_temp, is_driving, track_temp
+from .shm import air_temp, is_driving, player_position, track_temp
 
 THROTTLE = QColor("#3ddc84")
 BRAKE = QColor("#ff4d4d")
@@ -332,10 +332,9 @@ class InputsOverlay(OverlayWindow):
             self.setFixedSize(*size)
 
     def update_visibility(self, now):
-        """With "only while driving" on, the HUD hides in menus, the garage, replays and pause. A short
-        delay stops it flickering on transitions, and it always shows while unpinned for positioning."""
-        want = (not self.config.hide_until_driving or not self.locked
-                or now - self.last_driving < HIDE_DELAY_S)
+        """An enabled HUD can bypass the driving check while unpinned for positioning."""
+        want = self.config.show_hud and (not self.config.hide_until_driving or not self.locked
+                                         or now - self.last_driving < HIDE_DELAY_S)
         if want != self.isVisible():
             self.setVisible(want)
 
@@ -514,7 +513,7 @@ class InputsOverlay(OverlayWindow):
         self.draw_tracks(p, ENERGY_CX, ((180 - gap / 2, -(180 - gap), top, top_color),
                                         (180 + gap / 2, 180 - gap, bottom, bottom_color)))
         cx, cy, w = ENERGY_CX, R, 56
-        pos = g.current_pos if g is not None else 0
+        pos = player_position(g)
         p.setPen(ORANGE if pos else DIM)
         p.setFont(font(15, QFont.Bold))
         p.drawText(QRectF(cx - w / 2, cy - 21, w, 22), Qt.AlignHCenter | Qt.AlignBottom, f"P{pos}" if pos else "P–")

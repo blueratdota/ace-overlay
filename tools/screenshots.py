@@ -26,6 +26,7 @@ import ace_overlay.standings as standings_module  # noqa: E402
 import ace_overlay.standings_panel as standings_panel_module  # noqa: E402
 from ace_overlay.config import Config  # noqa: E402
 from ace_overlay.demo import DemoSource  # noqa: E402
+from ace_overlay.hud_standings import HudRow  # noqa: E402
 from ace_overlay.overlay import InputsOverlay, SideButton  # noqa: E402
 from ace_overlay.panel import InfoPanel  # noqa: E402
 from ace_overlay.standings_panel import StandingsPanel  # noqa: E402
@@ -34,6 +35,19 @@ OUT = ROOT / "docs" / "images"
 TICK = 1 / 60
 MARGIN = 28
 GIF_FPS = 20  # GIF delays are whole centiseconds; 20 fps = exactly 50 ms
+
+
+class DemoLeaderboard:
+    """Sample in-game leaderboard data for screenshots without a running game."""
+
+    def read(self):
+        return [
+            HudRow(0, "Maya Chen", "Porsche 911 GT3 RS", False, "–", "1:31.604", "1:32.017"),
+            HudRow(1, "Luca Rossi", "Ferrari 296 GTB", False, "+2.160", "1:31.702", "1:32.390"),
+            HudRow(2, "Demo Driver", "BMW M4 CSL", True, "+3.340", "1:31.842", "1:32.116"),
+            HudRow(3, "Sam Taylor", "Mercedes-AMG GT2", False, "+4.220", "1:32.047", "1:32.412"),
+            HudRow(4, "Nina Silva", "Lotus Emira", False, "+5.108", "1:32.180", "1:32.680"),
+        ]
 
 
 class Clock:
@@ -178,7 +192,8 @@ def main():
     panel.tick()
     save_png(render(panel, 2), "info-panel.png")
 
-    # The standings: by now the demo field has done a few laps (the first one learns the track).
+    # Show the large standings layout with sample bridge data.
+    standings.hud = DemoLeaderboard()
     standings.tick()
     save_png(render(standings, 2), "standings.png")
 

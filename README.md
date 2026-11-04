@@ -1,337 +1,35 @@
-<h1 align="center">AC EVO Overlay</h1>
+# AC EVO Overlay
 
-<p align="center">
-  <strong>A lightweight, real-time telemetry HUD for Assetto Corsa EVO.</strong><br>
-  A compact dash with your pedals, gear, shift lights, input trace, TC/ABS and battery, plus an info
-  panel for timing, fuel and tyre pressures and a live standings table, drawn on top of the game.
-</p>
+Portable telemetry HUD for Assetto Corsa EVO on Windows.
 
-<p align="center">
-  <a href="https://github.com/blueratdota/ace-overlay/actions/workflows/build.yml"><img alt="Build" src="https://github.com/blueratdota/ace-overlay/actions/workflows/build.yml/badge.svg"></a>
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white">
-  <img alt="No install needed" src="https://img.shields.io/badge/install-not%20needed-2ea44f">
-  <img alt="Game: Assetto Corsa EVO" src="https://img.shields.io/badge/game-Assetto%20Corsa%20EVO-c8102e">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow"></a>
-</p>
+[Download a release](https://github.com/blueratdota/ace-overlay/releases) · [Latest Windows builds](https://github.com/blueratdota/ace-overlay/actions/workflows/build.yml)
 
-<p align="center">
-  <img src="docs/images/overlay-demo.gif" alt="AC EVO Overlay running through a lap" width="780">
-  <br><sub>One demo lap: flat out with the shift lights, heavy braking with ABS, and TC on the exit.</sub>
-</p>
-
-<p align="center">
-  <a href="#-get-the-app-no-python-needed">Get the app</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#screenshots">Screenshots</a> ·
-  <a href="#using-the-overlay">Using it</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#development">Development</a>
-</p>
-
----
-
-## 🚀 Get the app (no Python needed)
-
-The app is a portable Windows program: a folder with `ace-overlay.exe` in it. There's nothing to
-install and you don't need Python. GitHub builds the program for you from this repository.
-
-### Option 1: Download a release (easiest)
-
-1. Go to the **[Releases page](https://github.com/blueratdota/ace-overlay/releases/latest)**.
-2. Under **Assets**, download `ace-overlay-<version>-win64.zip`.
-3. Continue with [Install and run](#install-and-run).
-
-> If the Releases page says there aren't any releases yet, use Option 2. It gets you the same
-> program.
-
-### Option 2: Download GitHub's latest automatic build
-
-GitHub rebuilds the program every time the code changes. You need a free GitHub account to download
-these builds.
-
-1. **Sign in** to [github.com](https://github.com/login) (or create a free account).
-2. Open the **[Build portable package](https://github.com/blueratdota/ace-overlay/actions/workflows/build.yml)**
-   page (the repository's **Actions** tab → *Build portable package*).
-3. Click the **newest run with a green check mark** ✅.
-4. Scroll down to **Artifacts** and click **`ace-overlay-win64`**. Your browser downloads
-   `ace-overlay-win64.zip`.
-5. Continue with [Install and run](#install-and-run).
-
-<details>
-<summary><b>No green run, or the download has expired?</b> Build it yourself on GitHub in about 5 minutes.</summary>
-
-<br>
-
-GitHub keeps automatic builds for 90 days. To make a fresh one, run the build in your own copy of
-the repository. It runs on GitHub's computers, not yours:
-
-1. At the top-right of this repository, click **Fork** → **Create fork**.
-2. In your fork, open the **Actions** tab. If GitHub asks, click **"I understand my workflows, go
-   ahead and enable them"**.
-3. In the list on the left, click **Build portable package**.
-4. Click **Run workflow** (right side) → **Run workflow**.
-5. Wait about 5 minutes until the run shows a green check mark ✅, then click it.
-6. Under **Artifacts**, click **`ace-overlay-win64`** to download it.
-
-</details>
-
-### Install and run
-
-1. **Extract** the downloaded zip into its own folder, for example `Documents\AC EVO Overlay`.
-   Keep all the files together: the `_internal` folder must stay next to `ace-overlay.exe`.
-2. In **Assetto Corsa EVO**, set the display mode to **Borderless** (or Windowed) in the video
-   settings. No overlay can draw over exclusive fullscreen, and VR isn't supported.
-3. Double-click **`ace-overlay.exe`**. It shows *Waiting for Assetto Corsa EVO…* until you're in a
-   session. You can start it before or after the game.
-4. **Position it:** click the 📌 pin next to the HUD, drag the HUD where you want it, and click the
-   pin again to lock it. Do the same for the info panel and the standings.
-5. **Adjust it:** click the ⚙️ gear under the pin for settings: HUD scale, shift-light colours,
-   trace length, and showing the HUD only while driving.
-
-> **"Windows protected your PC"?** The program isn't code-signed, so Windows SmartScreen warns about
-> it the first time. Click **More info** → **Run anyway**. Some antivirus tools also flag unsigned
-> programs built this way. That's a false positive.
-
-**Quit** from the green tray icon (bottom-right of the taskbar, possibly under the ^ arrow). **To
-update**, download a newer build and extract it over the same folder. Your settings and positions
-(`settings.ini`) are kept.
-
----
+![Demo lap with shift lights, braking and traction control](docs/images/overlay-demo.gif)
 
 ## Features
 
-**The HUD**, a compact pill-shaped dash:
+- **Inputs HUD** — Gear, speed, position, throttle and brake ring, adjustable pedal history, configurable RPM lights, and side-aware TC and ABS indicators inferred from wheel slip, plus track, air temperature and lap time.
+- **Engine and hybrid** — Power and torque, or battery charge, power, deployment and recovery on hybrids.
+- **Info panel** — Live lap delta and prediction, lap validity, fuel use and finish estimate, warm and garage tyre pressures, electronics, temperatures and nearby gaps.
+- **Standings** — Order, gaps, best and last laps, fastest-lap highlight and pit tags. Three layouts, adjustable row count and manufacturer badges from the local game installation when available. The optional bridge adds driver names, car models and game timing. Without it, standings are estimated from car positions after the overlay learns the track.
+- **Controls** — Pinnable, click-through windows with saved positions, individual visibility toggles, HUD scaling and an optional driving-only mode.
 
-- **Pedal ring.** The gear and speed sit inside a ring at the right end. Throttle fills three
-  quarters of it in green, and brake fills the left quarter in red.
-- **Shift lights.** 26 dots along the top edge, with your own colour zones and flash point. They're
-  also the RPM display.
-- **Real-time input trace.** Throttle, brake and clutch history. The right edge is always the live
-  input, and the time window is adjustable (2–30 s). The brake line turns orange while ABS works, and
-  the throttle line yellow while TC cuts.
-- **Side-aware TC and ABS.** The pill's rounded ends are thin lines: upper quarter TC (yellow), lower
-  quarter ABS (orange). The left end is the car's left wheels and the right end its right wheels, so
-  you can see which side is slipping.
-- **Energy ring and position.** The left end holds your position ("P19 of 20") inside a second ring.
-  On hybrids it shows battery charge (top) and engine power (bottom); on other cars, power (top) and
-  torque (bottom), against the car's highest values this session.
-- **Battery flow bar (hybrids).** A thin bar left of the trace that grows up in purple while the
-  battery deploys and down in green while it recovers energy.
-- **Track, air and lap time.** A chip under the dash.
-- **HUD scale.** 50–250 %, and it stays sharp at any size.
-- **Only while driving (optional).** Hides the HUD in menus, the garage, replays and pause.
+## Quick start
 
-**The info panel**, a separate window:
-
-- **Timing:** live delta to your best lap, predicted, current, last and best laps, and an INVALID
-  tag.
-- **Fuel:** litres left, use per lap, laps of fuel left, and fuel needed (or spare) to the end of the
-  session.
-- **Tyre pressures:** judged at the tyre's ideal temperature. It shows the pressure each tyre will
-  run when warm and the garage pressure to set. Ideal windows are learned per tyre compound.
-- **Car:** brake bias, TC, ABS and engine map settings, air and track temperature, and gaps ahead
-  and behind.
-
-**The standings**, a third window:
-
-- **Running order** with the gap to the leader (to the fastest lap in practice and qualifying), plus
-  each car's fastest and last lap. The session's fastest lap is purple, cars in the pits get a PIT
-  tag, and your row is highlighted.
-- **Compact.** It lists everyone if they fit, otherwise the top 3 plus the cars around you.
-- **Worked out by the overlay.** AC EVO doesn't publish other drivers' names, cars, classes or lap
-  times, only where each car is. The overlay learns the track during your first lap (and remembers
-  it per track), then follows and times every car itself. So cars show as "Car 7", classes aren't
-  split, and a car's lap times appear once the overlay has seen it complete a lap.
-
-**Out of the way:** always on top and click-through, so the mouse goes straight to the game. Pin every
-window anywhere. It's portable: no installer, no game files touched, and settings are saved next to
-the program.
+1. Download and extract the Windows ZIP. Keep its files together and run **ace-overlay.exe**.
+2. Set AC EVO to **Borderless** or **Windowed**. Use each panel's pin to move it, and the gear or tray menu for settings.
+3. Optional game leaderboard setup. Run **Setup standings.bat**, restart AC EVO and enable **ACE Standings Bridge** in the game's right-edge HUD drawer. The included [ACE UI App Loader](https://github.com/dreasgrech/ACEUIAppLoader) targets AC EVO `0.9.1+release.6`. For other builds, install a matching loader first.
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/abs-braking.png" alt="Left ABS arc lit while trail braking">
-      <p align="center"><sub><b>Trail braking into a left-hander.</b> The ring's red quarter shows the brake, and only the left ABS line lights up, where the unloaded inside wheels lock first.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="docs/images/tc-exit.png" alt="Left TC arc lit on corner exit">
-      <p align="center"><sub><b>Corner exit.</b> The upper-left TC line lights as the inside rear spins, and the throttle line in the trace turns yellow.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/hybrid-deploy.png" alt="Hybrid deploying battery power">
-      <p align="center"><sub><b>Hybrid, deploying.</b> Battery charge (cyan) and power (amber) in the left ring; the flow bar grows up in purple.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="docs/images/hybrid-recover.png" alt="Hybrid recovering energy under braking">
-      <p align="center"><sub><b>Hybrid, recovering.</b> Under braking the flow bar grows down in green as the battery recharges.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/shift-lights.png" alt="Shift lights flashing">
-      <p align="center"><sub><b>Shift point.</b> Every dot flashes when RPM reaches the flash threshold.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="docs/images/custom-rpm-colours.png" alt="Custom RPM light colours">
-      <p align="center"><sub><b>Your colours.</b> Shift-light zones and colours are configurable.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/move-mode.png" alt="Overlay unpinned for repositioning">
-      <p align="center"><sub><b>Move mode.</b> Unpin to drag the HUD anywhere, then pin it again to lock it.</sub></p>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/images/settings.png" alt="Settings window" width="300">
-      <p align="center"><sub><b>Settings.</b> Changes apply live and are saved automatically.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/images/standings.png" alt="Standings" width="380">
-    </td>
-    <td width="50%">
-      <p><b>Standings</b></p>
-      <sub>
-        <b>Race order</b> with the gap to the leader, plus every car's fastest and last lap.<br><br>
-        <b>Purple</b> marks the session's fastest lap, and your row is highlighted in gold.<br><br>
-        <b>Long fields</b> show the top 3, then the cars around you. Lapped cars show laps down ("2L"), and cars in the pits get a PIT tag.
-      </sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/images/info-panel.png" alt="Info panel" width="300">
-    </td>
-    <td width="50%">
-      <p><b>Info panel</b></p>
-      <sub>
-        <b>Timing:</b> live delta to your best lap (green = faster), predicted, current, last and best laps.<br><br>
-        <b>Fuel:</b> litres left, use per lap, laps remaining, and how much to add (or spare) for the rest of the session.<br><br>
-        <b>Tyre pressures:</b> live pressure, the pressure at ideal temperature (e.g. "@78° 30.7"), and the garage pressure to set.<br><br>
-        <b>Car:</b> brake bias, TC, ABS and engine map, air and track temperature, and gaps.
-      </sub>
-    </td>
-  </tr>
-</table>
+Captured with simulated telemetry.
 
-## Using the overlay
-
-| Control | What it does |
+| | |
 | --- | --- |
-| 📌 **Pin** (beside each window) | Click to unpin, drag the window into place, then click again to lock it. When it's locked, clicks pass through to the game. The HUD, the info panel and the standings each have their own pin, and positions are remembered. |
-| ⚙️ **Gear** (under the HUD's pin) | Opens the settings window. |
-| **Tray icon** | Right-click for *Move overlays* (unpins every window), *Show info panel*, *Show standings*, *Settings…* and *Quit*. |
+| ![ABS under braking](docs/images/abs-braking.png) **ABS under braking** | ![TC on exit](docs/images/tc-exit.png) **TC on exit** |
+| ![Hybrid battery deployment](docs/images/hybrid-deploy.png) **Hybrid deployment** | ![Hybrid energy recovery](docs/images/hybrid-recover.png) **Hybrid recovery** |
+| ![Shift flash](docs/images/shift-lights.png) **Shift flash** | ![Custom RPM colours](docs/images/custom-rpm-colours.png) **Custom RPM colours** |
+| ![HUD move mode](docs/images/move-mode.png) **Move mode** | <img src="docs/images/settings.png" alt="Settings" width="300"> **Settings** |
+| <img src="docs/images/standings.png" alt="Large standings layout with sample driver names and car models" width="380"> **Standings** | <img src="docs/images/info-panel.png" alt="Timing, fuel and tyres" width="300"> **Info panel** |
 
-The pin and gear fade out while you drive and light up when you hover over them.
-
-### Settings
-
-| Setting | Default | Description |
-| --- | --- | --- |
-| Input trace time window | 8 s | How much history the trace shows (2–30 s). Longer means slower scrolling. |
-| Lights start at | 80 % | RPM (as % of max) where the first shift light comes on. The lights spread evenly from here to the flash point. |
-| Colour 2 from / Colour 3 from | 86 % / 92 % | Where the lights change colour. Each light takes the colour of the RPM % it represents. |
-| Flash at | 97 % | RPM where every light flashes. |
-| Colours | green / yellow / red / blue | One swatch per zone, plus the flash colour. |
-| HUD scale | 100 % | Size of the HUD, 50–250 %. |
-| Only show the HUD while driving | off | Hides the HUD in menus, the garage or pit box, replays and pause, and shows it once you leave the pit box. The info panel isn't affected. While the HUD is hidden, the tray icon still offers *Move overlays* and *Settings…*. |
-| Show the info panel | on | Shows or hides the info panel (also in the tray menu). |
-| Show the standings | on | Shows or hides the standings (also in the tray menu). |
-| Standings rows | 12 | The most rows the standings show (5–40). With more cars than that, it shows the top 3 and the cars around you. |
-
-## How it works
-
-AC EVO publishes live telemetry through Windows shared memory. This is the same official interface
-that dashboards and tools like SimHub use. The overlay reads it **read-only** about 60 times a
-second and draws it in a transparent, always-on-top window. It never modifies game files and never
-injects into the game.
-
-```
-             ┌─▶ Local\acevo_pmf_physics   pedals, gear, speed, RPM, ABS/TC, temperatures ─┐
-AC EVO ──────┼─▶ Local\acevo_pmf_graphics  laps, fuel, tyres, battery, all cars' positions ┼──▶ ace-overlay ──▶ HUD + panels
-             └─▶ Local\acevo_pmf_static    session type, track ────────────────────────────┘
-```
-
-### Good to know
-
-- **Verified against the live game.** Several documented fields turned out to be unused by AC EVO,
-  so every value shown was checked while driving (Golf 8 R, BMW M3 E46 CSL, Dallara EXP, Ferrari SF25).
-- **Tyre wear isn't shown.** AC EVO doesn't publish it.
-- **Standings are worked out, not read.** The game only says where each car is. Gaps and lap times
-  are measured by the overlay from when it first sees a car, and laps are counted from your own, so
-  start the overlay before a race starts: a car that was already lapped before then is shown up to
-  a lap too high. The first time on a track it needs one lap of yours to learn the track.
-- **The TC/ABS side is inferred.** The game only reports TC and ABS as on/off for the whole car. The
-  overlay picks the side from per-wheel slip, and lights both sides when they're close.
-- **Early access.** Kunos can change the telemetry between patches. If values look wrong after an
-  update, run **`Check telemetry.bat`** (in the program folder) while driving, compare it with the
-  in-game HUD, and [open an issue](https://github.com/blueratdota/ace-overlay/issues).
-
-## Development
-
-Running from source needs **Python 3.11+** on Windows.
-
-```bash
-git clone https://github.com/blueratdota/ace-overlay.git
-cd ace-overlay
-python -m venv .venv
-.venv\Scripts\pip install -e .[build,dev]
-
-.venv\Scripts\python -m ace_overlay               # run the overlay
-.venv\Scripts\python -m ace_overlay --demo        # simulated telemetry, no game needed
-.venv\Scripts\python -m ace_overlay --dump        # print live telemetry to the console
-.venv\Scripts\python -m unittest discover -s tests
-.venv\Scripts\python tools\screenshots.py         # regenerate the images in docs/images
-.venv\Scripts\python build.py                     # build dist/ace-overlay-<version>-win64.zip
-```
-
-The demo drives a repeating 10-second lap, so every part of the HUD can be worked on without the
-game. `build.py` packages the app with PyInstaller, strips unused Qt modules, and zips a portable
-folder with a user-facing `README.txt` and `Check telemetry.bat`.
-
-**Automatic builds:** [`.github/workflows/build.yml`](.github/workflows/build.yml) runs the tests and
-`build.py` on GitHub's Windows machines for every push to `main`, and attaches the program as the
-`ace-overlay-win64` artifact. **To publish a release**, bump `version` in `pyproject.toml` and push a
-matching tag (for example `git tag v0.2.0 && git push origin v0.2.0`). The workflow then attaches
-the zip to a GitHub Release.
-
-### Project layout
-
-```
-ace_overlay/
-├── shm.py        # read-only shared-memory reader, physics / graphics / static structs
-├── overlay.py    # the HUD, the shared pinnable window, pin and settings buttons
-├── panel.py      # the info panel
-├── standings.py  # standings model: learns the track, follows and times every car
-├── standings_panel.py  # the standings window
-├── tyres.py      # tyre-pressure model: learns each compound's ideal windows
-├── config.py     # user settings and the settings window
-├── demo.py       # simulated telemetry lap
-└── app.py        # entry point: CLI flags, tray icon, portable-mode settings
-packaging/        # PyInstaller launcher and files shipped in the zip
-tools/            # screenshot / GIF generator, shared-memory probe
-tests/            # struct layout, tyre model, standings and helper tests
-build.py          # portable package builder
-.github/          # automatic build workflow
-```
-
-## Acknowledgements
-
-- Kunos Simulazioni's official
-  [AC EVO shared memory documentation](https://steamcommunity.com/sharedfiles/filedetails/?id=3707421508).
-- [live-telemetry-evo](https://github.com/albertowd/live-telemetry-evo) for its detailed
-  [shared memory reference](https://github.com/albertowd/live-telemetry-evo/blob/develop/docs/SHARED_MEMORY.md).
-
-## License
-
-Released under the [MIT License](LICENSE).
-
-## Disclaimer
-
-This is an independent community project. It isn't affiliated with or endorsed by Kunos
-Simulazioni. *Assetto Corsa* is a trademark of its respective owner.
+[MIT License](LICENSE) · Independent community project.

@@ -17,6 +17,17 @@ HOW TO USE
 
 3. Get on track. The overlay fills with live data.
 
+OPTIONAL GAME STANDINGS
+-----------------------
+1. Run Setup standings.bat from this folder. It installs the bundled HUD loader and bridge
+   into Saved Games\ACE. It keeps any loader you already installed.
+2. Restart AC EVO and enter a session. Open the right-edge HUD drawer and enable
+   ACE Standings Bridge.
+
+The bundled loader targets AC EVO 0.9.1+release.6. For another game build, install a matching
+ACE UI App Loader before running setup. With the bridge active, the standings panel can show
+driver names and car models from the game.
+
 
 CONTROLS
 --------

@@ -30,8 +30,8 @@ python -m venv .venv && .venv\Scripts\pip install -e .[build,dev]
 - **The graphics block feeds the info panel** (`panel.py`): fuel (`fuel_liter_per_lap`,
   `laps_possible_with_fuel`), lap times, `delta_time_ms`/`predicted_lap_time_ms` (0 in the pits),
   `session_state.time_left_ms`/`total_lap` (0 = timed session), `electronics` (TC/ABS/map levels,
-  brake bias), and gaps. All verified live. `current_pos` is 0 in practice until you set a lap (then it's P20 of 21, so
-  presumably ranked by best lap).
+  brake bias), and gaps. All verified live. `current_pos` is zero-based once ranked (20 means P21
+  in a 21-car field). In practice it can also be 0 before you set a lap.
 - **Tyre pressure follows bulk temperature exactly:** psi = garage psi + 0.096 × (`TyreState.temperature_c`
   − 40 °C), with R² = 1.000 on all tyres. `temperature_c` equals physics `tyreCoreTemperature`.
   There's no target pressure. The normalised values are exactly 1.0 inside a per-compound ideal

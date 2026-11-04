@@ -289,7 +289,7 @@ class Graphics(ctypes.Structure):
         ("electronics_max_limit", Electronics),
         ("electronics_is_modifiable", Electronics),
         ("total_lap_count", _i),  # completed laps
-        ("current_pos", ctypes.c_uint32),  # 0 when the session doesn't rank
+        ("current_pos", ctypes.c_uint32),  # zero-based rank; also 0 before a rank is available
         ("total_drivers", ctypes.c_uint32),
         ("last_laptime_ms", _i),
         ("best_laptime_ms", _i),
@@ -436,6 +436,15 @@ def track_temp(physics):
 def is_driving(graphics):
     """True once the car is out of the garage / pit box in a live session (pit lane counts)."""
     return graphics is not None and graphics.status == STATUS_LIVE and not graphics.is_in_pit_box
+
+
+def player_position(graphics):
+    """Return the one-based rank, or zero while the game has no rank to show."""
+    if graphics is None or graphics.current_pos >= graphics.total_drivers:
+        return 0
+    if graphics.current_pos == 0 and graphics.best_laptime_ms <= 0:
+        return 0
+    return graphics.current_pos + 1
 
 
 class LiveSource:

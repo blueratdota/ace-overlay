@@ -4,7 +4,7 @@ from dataclasses import dataclass, fields
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QColorDialog, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QGroupBox,
                                QHBoxLayout, QPushButton, QSpinBox, QVBoxLayout, QWidget)
 
 
@@ -28,6 +28,8 @@ class Config:
     hud_scale: int = 100  # % size of the HUD
     show_standings: bool = True  # the separate standings window
     standings_rows: int = 12  # rows it shows at most: the leaders, then the cars around the player
+    show_hud: bool = True  # the main inputs and telemetry overlay
+    standings_layout: str = "large"
 
     @classmethod
     def load(cls, settings):
@@ -35,6 +37,8 @@ class Config:
         for f in fields(cls):
             default = getattr(config, f.name)
             setattr(config, f.name, settings.value(f"config/{f.name}", default, type=type(default)))
+        if config.standings_layout == "full":
+            config.standings_layout = "large"
         return config
 
     def save(self, settings):
@@ -99,13 +103,19 @@ class SettingsDialog(QDialog):
         rpm_form.addRow("Flash at", self.row(self.rpm_flash, self.flash_color))
 
         self.hide_until_driving = QCheckBox("Only show the HUD while driving (hidden in menus, the garage, replays and pause)")
+        self.show_hud = QCheckBox("Show the inputs HUD")
         self.show_panel = QCheckBox("Show the info panel (timing, fuel, tyre pressures, car settings)")
-        panel_box = QGroupBox("Windows")
+        panel_box = QGroupBox("Overlays")
+        self.standings_layout = QComboBox()
+        self.standings_layout.addItem("Small", "small")
+        self.standings_layout.addItem("Medium", "medium")
+        self.standings_layout.addItem("Large", "large")
         self.hud_scale = QSpinBox(minimum=50, maximum=250, singleStep=10, suffix=" %")
         self.hud_scale.setToolTip("Size of the HUD. It's drawn as shapes and text, so it stays sharp at any size.")
         scale_row = QWidget()
         scale_layout = QFormLayout(scale_row)
         scale_layout.setContentsMargins(0, 0, 0, 0)
+        scale_layout.addRow("Leaderboard layout", self.standings_layout)
         scale_layout.addRow("HUD scale", self.hud_scale)
         self.show_standings = QCheckBox("Show the standings (running order, gaps and lap times)")
         self.standings_rows = QSpinBox(minimum=5, maximum=40)
@@ -113,9 +123,10 @@ class SettingsDialog(QDialog):
         scale_layout.addRow("Standings rows", self.standings_rows)
         windows_layout = QVBoxLayout(panel_box)
         windows_layout.addWidget(scale_row)
-        windows_layout.addWidget(self.hide_until_driving)
+        windows_layout.addWidget(self.show_hud)
         windows_layout.addWidget(self.show_panel)
         windows_layout.addWidget(self.show_standings)
+        windows_layout.addWidget(self.hide_until_driving)
 
         buttons = QDialogButtonBox(QDialogButtonBox.RestoreDefaults | QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
@@ -132,9 +143,11 @@ class SettingsDialog(QDialog):
             spin.valueChanged.connect(self.apply)
         for button in (self.color1, self.color2, self.color3, self.flash_color):
             button.changed.connect(self.apply)
+        self.show_hud.toggled.connect(self.apply)
         self.show_panel.toggled.connect(self.apply)
         self.hide_until_driving.toggled.connect(self.apply)
         self.hud_scale.valueChanged.connect(self.apply)
+        self.standings_layout.currentIndexChanged.connect(self.apply)
         self.show_standings.toggled.connect(self.apply)
         self.standings_rows.valueChanged.connect(self.apply)
 
@@ -155,9 +168,12 @@ class SettingsDialog(QDialog):
             getattr(self, name).setValue(getattr(c, name))
         for name in ("color1", "color2", "color3", "flash_color"):
             getattr(self, name).set_color(getattr(c, name))
+        self.show_hud.setChecked(c.show_hud)
         self.show_panel.setChecked(c.show_panel)
         self.hide_until_driving.setChecked(c.hide_until_driving)
         self.hud_scale.setValue(c.hud_scale)
+        index = self.standings_layout.findData(c.standings_layout)
+        self.standings_layout.setCurrentIndex(index if index >= 0 else self.standings_layout.findData("large"))
         self.show_standings.setChecked(c.show_standings)
         self.standings_rows.setValue(c.standings_rows)
         self.rpm_flash.setMinimum(c.rpm_start + 1)
@@ -174,9 +190,11 @@ class SettingsDialog(QDialog):
             setattr(c, name, getattr(self, name).value())
         for name in ("color1", "color2", "color3", "flash_color"):
             setattr(c, name, getattr(self, name).color)
+        c.show_hud = self.show_hud.isChecked()
         c.show_panel = self.show_panel.isChecked()
         c.hide_until_driving = self.hide_until_driving.isChecked()
         c.hud_scale = self.hud_scale.value()
+        c.standings_layout = self.standings_layout.currentData()
         c.show_standings = self.show_standings.isChecked()
         c.standings_rows = self.standings_rows.value()
         c.save(self.overlay.settings)

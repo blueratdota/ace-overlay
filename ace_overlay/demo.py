@@ -137,7 +137,7 @@ class DemoSource:
         g.predicted_lap_time_ms = g.best_laptime_ms + g.delta_time_ms
         g.is_valid_lap = lap_index % 5 != 3
         g.session_state.time_left_ms = max(0, int(25 * 60_000 - elapsed * DEMO_LAP_MS / 10))
-        g.current_pos, g.total_drivers = 3, 16
+        g.current_pos, g.total_drivers = 2, 16
         g.gap_ahead, g.gap_behind = 1.2 + 0.3 * math.sin(elapsed / 7), -(0.8 + 0.2 * math.cos(elapsed / 5))
         g.driver_name, g.driver_surname = b"Demo", b"Driver"
         fracs = [g.npos] + [(ahead + elapsed / (10 * pace) + 0.003 * math.sin(elapsed / 4 + k)) % 1.0
